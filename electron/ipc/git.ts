@@ -1,7 +1,14 @@
 import { ipcMain } from 'electron';
 import { IPC } from '../../shared/ipc';
 import { GitService } from '../services/git-service';
-import type { GitLogOptions } from '../../shared/types';
+import { broadcastToRenderer } from '../utils/broadcast';
+import type { GitLogOptions, GitStatusChangedPayload } from '../../shared/types';
+
+/** Notify all renderer windows + companion clients that git status changed. */
+function pushStatusChanged(projectPath?: string, branchChanged?: boolean): void {
+  const payload: GitStatusChangedPayload = { projectPath, branchChanged: branchChanged ?? false };
+  broadcastToRenderer(IPC.GIT_STATUS_CHANGED, payload);
+}
 
 const gitServices = new Map<string, GitService>();
 let activeProjectPath: string | null = null;
@@ -48,10 +55,12 @@ export function registerGitIpc() {
 
   ipcMain.handle(IPC.GIT_CHECKOUT, async (_event, branch: string, projectPath?: string) => {
     await getGitService(projectPath).checkout(branch);
+    pushStatusChanged(projectPath, true);
   });
 
   ipcMain.handle(IPC.GIT_CREATE_BRANCH, async (_event, name: string, from?: string, projectPath?: string) => {
     await getGitService(projectPath).createBranch(name, from);
+    pushStatusChanged(projectPath, true);
   });
 
   ipcMain.handle(IPC.GIT_STAGE, async (_event, paths: string[], projectPath?: string) => {
@@ -64,14 +73,18 @@ export function registerGitIpc() {
 
   ipcMain.handle(IPC.GIT_COMMIT, async (_event, message: string, projectPath?: string) => {
     await getGitService(projectPath).commit(message);
+    pushStatusChanged(projectPath);
   });
 
   ipcMain.handle(IPC.GIT_PUSH, async (_event, remote?: string, branch?: string, projectPath?: string) => {
     await getGitService(projectPath).push(remote, branch);
+    pushStatusChanged(projectPath);
   });
 
   ipcMain.handle(IPC.GIT_PULL, async (_event, remote?: string, branch?: string, projectPath?: string) => {
-    await getGitService(projectPath).pull(remote, branch);
+    const result = await getGitService(projectPath).pull(remote, branch);
+    pushStatusChanged(projectPath);
+    return result;
   });
 
   ipcMain.handle(IPC.GIT_DIFF, async (_event, ref1?: string, ref2?: string, projectPath?: string) => {
@@ -91,25 +104,35 @@ export function registerGitIpc() {
   });
 
   ipcMain.handle(IPC.GIT_STASH_APPLY, async (_event, stashId: string, projectPath?: string) => {
-    await getGitService(projectPath).stashApply(stashId);
+    const result = await getGitService(projectPath).stashApply(stashId);
+    pushStatusChanged(projectPath);
+    return result;
   });
 
   // ── Conflict resolution ────────────────────────────────────────────
 
   ipcMain.handle(IPC.GIT_MERGE, async (_event, branch: string, projectPath?: string) => {
-    return getGitService(projectPath).merge(branch);
+    const result = await getGitService(projectPath).merge(branch);
+    pushStatusChanged(projectPath);
+    return result;
   });
 
   ipcMain.handle(IPC.GIT_REBASE, async (_event, upstream: string, projectPath?: string) => {
-    return getGitService(projectPath).rebase(upstream);
+    const result = await getGitService(projectPath).rebase(upstream);
+    pushStatusChanged(projectPath);
+    return result;
   });
 
   ipcMain.handle(IPC.GIT_CHERRY_PICK, async (_event, commitHash: string, projectPath?: string) => {
-    return getGitService(projectPath).cherryPick(commitHash);
+    const result = await getGitService(projectPath).cherryPick(commitHash);
+    pushStatusChanged(projectPath);
+    return result;
   });
 
   ipcMain.handle(IPC.GIT_REVERT, async (_event, commitHash: string, projectPath?: string) => {
-    return getGitService(projectPath).revert(commitHash);
+    const result = await getGitService(projectPath).revert(commitHash);
+    pushStatusChanged(projectPath);
+    return result;
   });
 
   ipcMain.handle(IPC.GIT_GET_CONFLICTS, async (_event, projectPath?: string) => {
@@ -118,21 +141,28 @@ export function registerGitIpc() {
 
   ipcMain.handle(IPC.GIT_ABORT_OPERATION, async (_event, projectPath?: string) => {
     await getGitService(projectPath).abortOperation();
+    pushStatusChanged(projectPath, true);
   });
 
   ipcMain.handle(IPC.GIT_CONTINUE_OPERATION, async (_event, projectPath?: string) => {
-    return getGitService(projectPath).continueOperation();
+    const result = await getGitService(projectPath).continueOperation();
+    pushStatusChanged(projectPath, true);
+    return result;
   });
 
   ipcMain.handle(IPC.GIT_RESOLVE_FILE, async (_event, filePath: string, projectPath?: string) => {
     await getGitService(projectPath).resolveFile(filePath);
+    pushStatusChanged(projectPath);
   });
 
   ipcMain.handle(IPC.GIT_SKIP_COMMIT, async (_event, projectPath?: string) => {
-    return getGitService(projectPath).skipRebaseCommit();
+    const result = await getGitService(projectPath).skipRebaseCommit();
+    pushStatusChanged(projectPath, true);
+    return result;
   });
 
   ipcMain.handle(IPC.GIT_RESOLVE_CONFLICT_STRATEGY, async (_event, filePath: string, strategy: 'ours' | 'theirs' | 'mark-resolved', projectPath?: string) => {
     await getGitService(projectPath).resolveConflictWithStrategy(filePath, strategy);
+    pushStatusChanged(projectPath);
   });
 }
