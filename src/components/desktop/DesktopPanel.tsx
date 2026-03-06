@@ -77,8 +77,9 @@ export default function DesktopPanel() {
       <DesktopHeader projectPath={projectPath} />
 
       <div className="flex-1 overflow-hidden">
-        {/* Running — show noVNC viewer */}
-        {status === 'running' && desktopState && (
+        {/* Running — show noVNC viewer (only once vncPassword is available to avoid
+            mounting the iframe before the postMessage handshake can succeed) */}
+        {status === 'running' && desktopState && desktopState.vncPassword && (
           <DesktopViewer wsPort={desktopState.wsPort} vncPassword={desktopState.vncPassword} />
         )}
 

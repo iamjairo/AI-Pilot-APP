@@ -68,9 +68,10 @@ export default function DesktopViewer({ wsPort, vncPassword }: DesktopViewerProp
   useEffect(() => {
     const origin = `http://localhost:${wsPort}`;
     const handler = (event: MessageEvent) => {
-      if (event.origin !== origin || event.data?.type !== 'vnc-ready') return;
-      // Verify the iframe echoed back our one-time token — this authenticates
-      // the sender even when origin comparison is unavailable (file:// origins).
+      if (event.data?.type !== 'vnc-ready') return;
+      // Validate sender origin — the iframe is on http://localhost:<wsPort>
+      if (event.origin !== origin) return;
+      // Also verify the one-time token for defence in depth
       if (event.data?.token !== postMessageToken) return;
       iframeRef.current?.contentWindow?.postMessage(
         { type: 'vnc-connect', password: vncPassword, token: postMessageToken },
@@ -127,12 +128,14 @@ export default function DesktopViewer({ wsPort, vncPassword }: DesktopViewerProp
         src={noVncUrl}
         className="w-full h-full border-0"
         title="Desktop Virtual Display"
-        // allow-scripts is required for the noVNC client. allow-same-origin is
-        // intentionally omitted: noVNC's WebSocket connection and the
-        // postMessage credential flow work without it, and the allow-scripts +
-        // allow-same-origin combination lets the framed document escape sandbox
-        // isolation per the HTML spec.
-        sandbox="allow-scripts allow-forms"
+        // allow-scripts is required for the noVNC client's JS modules.
+        // allow-same-origin is required because ES module imports (rfb.js)
+        // are subject to CORS — without it the iframe gets an opaque origin
+        // ("null") and the browser blocks module loads from the same server.
+        // This is safe because the iframe (http://localhost:<docker-port>) and
+        // the parent (http://localhost:5174 in dev, file:// in prod) are always
+        // different origins — the iframe cannot access the parent's DOM.
+        sandbox="allow-scripts allow-same-origin allow-forms"
         allow="clipboard-read; clipboard-write"
         onLoad={handleLoad}
         onError={handleError}

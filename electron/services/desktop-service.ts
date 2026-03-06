@@ -12,7 +12,8 @@ import { validateProjectPath } from '../utils/ipc-validation';
 import { existsSync, lstatSync, statSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { createHash, randomBytes } from 'crypto';
 import { execFile } from 'child_process';
-import { createServer, createConnection } from 'net';
+import { createServer } from 'net';
+import { get as httpGet } from 'http';
 import { IPC } from '../../shared/ipc';
 import { broadcastToRenderer } from '../utils/broadcast';
 import type { DesktopState, DesktopConfig } from '../../shared/types';
@@ -1067,7 +1068,9 @@ export class DesktopService {
     });
   }
 
-  /** Poll until noVNC websockify is responding on the given port. */
+  /** Poll until noVNC websockify is actually serving HTTP on the given port.
+   *  A bare TCP connect is not enough — Docker's port forward accepts connections
+   *  before websockify inside the container is ready, causing ERR_EMPTY_RESPONSE. */
   private async waitForReady(wsPort: number, signal?: AbortSignal): Promise<void> {
     const deadline = Date.now() + READY_TIMEOUT_MS;
 
@@ -1076,24 +1079,24 @@ export class DesktopService {
       if (signal?.aborted) return;
 
       try {
-        await new Promise<void>((resolve, reject) => {
-          const client = createConnection({ port: wsPort, host: '127.0.0.1' }, () => {
-            client.destroy();
-            resolve();
-          });
-          client.on('error', () => {
-            client.destroy();
-            reject();
-          });
-          client.setTimeout(READY_POLL_MS, () => {
-            client.destroy();
-            reject();
-          });
+        const ok = await new Promise<boolean>((resolve) => {
+          const req = httpGet(
+            `http://127.0.0.1:${wsPort}/pilot-vnc.html`,
+            { timeout: READY_POLL_MS },
+            (res) => {
+              res.resume(); // Drain the response
+              resolve(res.statusCode === 200);
+            },
+          );
+          req.on('error', () => resolve(false));
+          req.on('timeout', () => { req.destroy(); resolve(false); });
         });
-        return; // Connected successfully
+        if (ok) return;
       } catch {
-        await new Promise(r => setTimeout(r, READY_POLL_MS));
+        // ignore
       }
+
+      await new Promise(r => setTimeout(r, READY_POLL_MS));
     }
 
     throw new Error(`Desktop noVNC did not become ready within ${READY_TIMEOUT_MS / 1000}s`);

@@ -211,6 +211,8 @@ export function Tab({ tabId, isActive, onDragStart, onDragOver, onDrop }: TabPro
             <Icon name="BookOpen" size={14} className="flex-shrink-0 text-text-secondary" />
           ) : tab.type === 'web' ? (
             <Icon name="Globe" size={14} className="flex-shrink-0 text-text-secondary" />
+          ) : tab.type === 'desktop' ? (
+            <Icon name="Monitor" size={14} className="flex-shrink-0 text-text-secondary" />
           ) : (
             <div
               className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_COLORS[chatStatus]} ${

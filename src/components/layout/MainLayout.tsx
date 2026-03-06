@@ -8,6 +8,7 @@ import ContextPanel from '../context/ContextPanel';
 import { TaskBoardView } from '../tasks/TaskBoardView';
 import { DocsViewer } from '../docs/DocsViewer';
 import { WebView } from '../web/WebView';
+import DesktopTabView from '../desktop/DesktopTabView';
 
 export default function MainLayout() {
   const { sidebarVisible, contextPanelVisible, setSidebarWidth, setContextPanelWidth } = useUIStore();
@@ -33,6 +34,8 @@ export default function MainLayout() {
         return <DocsViewer />;
       case 'web':
         return <WebView />;
+      case 'desktop':
+        return <DesktopTabView />;
       default:
         return <ChatView />;
     }

@@ -6,6 +6,10 @@ set -euo pipefail
 # --disable-gpu avoids GPU driver issues in headless environments.
 export CHROMIUM_FLAGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
 
+# Clean up stale lock files from previous container runs (stop → resume).
+# Xvfb refuses to start if /tmp/.X99-lock exists from a prior session.
+rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
+
 # Start virtual framebuffer
 Xvfb "$DISPLAY" -screen 0 "$RESOLUTION" &
 
@@ -33,9 +37,9 @@ if [ -f "$VNC_SECRET_FILE" ] && [ -s "$VNC_SECRET_FILE" ]; then
   x11vnc -storepasswd "$(cat "$VNC_SECRET_FILE")" /tmp/vncpasswd
   chmod 600 /tmp/vncpasswd
   rm -f "$VNC_SECRET_FILE"
-  x11vnc -display "$DISPLAY" -forever -noshared -rfbauth /tmp/vncpasswd -rfbport 5900 &
+  x11vnc -display "$DISPLAY" -forever -shared -rfbauth /tmp/vncpasswd -rfbport 5900 &
   # Wait for x11vnc to bind port 5900 (confirms it has initialised and read
-  # the password file) before deleting. Mirrors the Xvfb readiness pattern above.
+  # the password file). Mirrors the Xvfb readiness pattern above.
   for i in $(seq 1 20); do
     nc -z localhost 5900 && break
     sleep 0.5
@@ -43,7 +47,11 @@ if [ -f "$VNC_SECRET_FILE" ] && [ -s "$VNC_SECRET_FILE" ]; then
   nc -z localhost 5900 || {
     echo "ERROR: x11vnc did not bind port 5900 within 10s" >&2; exit 1;
   }
-  rm -f /tmp/vncpasswd
+  # NOTE: Do NOT delete /tmp/vncpasswd here. x11vnc with -rfbauth re-reads the
+  # DES-encrypted password file on every client authentication attempt, not just
+  # at startup. Deleting it causes "Couldn't read password file" errors.
+  # The plaintext /run/secrets/vnc_password is already deleted above — that's
+  # the sensitive one. /tmp/vncpasswd is DES-encrypted and stays mode 600.
 else
   echo "ERROR: VNC password file not found at $VNC_SECRET_FILE" >&2
   exit 1

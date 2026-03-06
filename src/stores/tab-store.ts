@@ -9,7 +9,7 @@ import { useProjectStore } from './project-store';
  */
 export interface TabState {
   id: string;
-  type: 'chat' | 'file' | 'tasks' | 'docs' | 'web';
+  type: 'chat' | 'file' | 'tasks' | 'docs' | 'web' | 'desktop';
   filePath: string | null; // for file tabs; URL for web tabs
   title: string;
   projectPath: string | null;
@@ -51,6 +51,7 @@ interface TabStore {
   addTasksTab: (projectPath: string) => string;
   addDocsTab: (page?: string) => string;
   addWebTab: (url: string, projectPath: string | null, title?: string, background?: boolean) => string;
+  addDesktopTab: (projectPath: string) => string;
   closeTab: (tabId: string) => void;
   switchTab: (tabId: string) => void;
   switchToTabByIndex: (index: number) => void;
@@ -343,6 +344,49 @@ export const useTabStore = create<TabStore>((set, get) => {
       set(state => ({
         tabs: [...state.tabs, newTab],
         ...(background ? {} : { activeTabId: newTabId }),
+      }));
+
+      return newTabId;
+    },
+
+    addDesktopTab: (projectPath: string) => {
+      // Deduplicate: if a desktop tab for this project exists, switch to it
+      const existing = get().tabs.find(
+        (t) => t.type === 'desktop' && t.projectPath === projectPath,
+      );
+      if (existing) {
+        get().switchTab(existing.id);
+        return existing.id;
+      }
+
+      const newTabId = crypto.randomUUID();
+      const tabs = get().tabs;
+      const maxOrder = tabs.length > 0 ? Math.max(...tabs.map(t => t.order)) : -1;
+
+      const newTab: TabState = {
+        id: newTabId,
+        type: 'desktop',
+        filePath: null,
+        title: 'Desktop',
+        projectPath,
+        sessionPath: null,
+        projectColor: getProjectColor(projectPath),
+        isPinned: false,
+        order: maxOrder + 1,
+        scrollPosition: 0,
+        inputDraft: '',
+        panelConfig: {
+          sidebarVisible: true,
+          contextPanelVisible: false,
+          contextPanelTab: 'files',
+        },
+        lastActiveAt: Date.now(),
+        hasUnread: false,
+      };
+
+      set(state => ({
+        tabs: [...state.tabs, newTab],
+        activeTabId: newTabId,
       }));
 
       return newTabId;

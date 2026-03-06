@@ -56,25 +56,10 @@ export default function DesktopHeader({ projectPath }: DesktopHeaderProps) {
         {isRunning && desktopState && (
           <button
             onClick={() => {
-              // Open stock noVNC without the password in the URL. noVNC auto-connects;
-              // when the server requests auth it shows a built-in credential dialog.
-              // The password is copied to the clipboard so the user can paste it.
-              const url = `http://localhost:${desktopState.wsPort}/vnc.html?autoconnect=true&resize=scale&toolbar=0&view_only=false`;
-              useTabStore.getState().addWebTab(url, projectPath, 'Desktop');
-              if (desktopState.vncPassword) {
-                navigator.clipboard.writeText(desktopState.vncPassword).catch(() => {});
-                // Clear the password from the clipboard after 10s to limit exposure
-                setTimeout(() => {
-                  navigator.clipboard.readText().then(text => {
-                    if (text === desktopState.vncPassword) {
-                      navigator.clipboard.writeText('').catch(() => {});
-                    }
-                  }).catch(() => {});
-                }, 10_000);
-              }
+              useTabStore.getState().addDesktopTab(projectPath);
             }}
             className="p-1.5 hover:bg-bg-surface rounded transition-colors"
-            title="Open desktop in a tab (VNC password copied to clipboard)"
+            title="Open desktop in a tab"
           >
             <ExternalLink className="w-3.5 h-3.5 text-text-secondary" />
           </button>
