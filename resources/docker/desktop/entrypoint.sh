@@ -1,10 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-# ── Chromium flags for running inside a container ────────────────────
-# --no-sandbox is required because the container already provides isolation.
-# --disable-gpu avoids GPU driver issues in headless environments.
-export CHROMIUM_FLAGS="--no-sandbox --disable-gpu --disable-dev-shm-usage"
+# NOTE: Chromium flags (--no-sandbox, --disable-gpu, etc.) are baked into the
+# /usr/local/bin/chromium wrapper script at image build time. Just run `chromium <url>`.
 
 # Clean up stale lock files from previous container runs (stop → resume).
 # Xvfb refuses to start if /tmp/.X99-lock exists from a prior session.

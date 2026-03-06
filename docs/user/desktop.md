@@ -212,8 +212,8 @@ The base container (`pilot-desktop:latest`) includes:
 | **fluxbox** | Lightweight window manager |
 | **x11vnc** | VNC server — makes the display accessible over the network |
 | **noVNC + websockify** | Browser-based VNC viewer — what you see in the panel |
-| **Chromium** | Web browser |
-| **Firefox** | Alternative web browser |
+| **Chromium** | Web browser (via Playwright) |
+| **Firefox** | Alternative web browser (via Playwright) |
 | **xdotool** | Mouse and keyboard automation |
 | **scrot** | Screenshot capture |
 | **xclip** | Clipboard management |

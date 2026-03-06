@@ -28,7 +28,7 @@ The Desktop feature provides project-scoped Docker containers with a virtual dis
 │                                    ├── Port allocation              │
 │                                    └── Persist config (.pilot/)     │
 │                                                                     │
-│  desktop-tools.ts ──→ 18 agent ToolDefinitions                      │
+│  desktop-tools.ts ──→ Agent ToolDefinitions                          │
 │                        (mouse, keyboard, screen, clipboard,         │
 │                         lifecycle, browser, exec)                   │
 │                                                                     │
@@ -42,7 +42,7 @@ The Desktop feature provides project-scoped Docker containers with a virtual dis
 │                                                                     │
 │  Xvfb :99 ──→ fluxbox ──→ x11vnc :5900 ──→ websockify :6080       │
 │                                                                     │
-│  Browsers: chromium-browser, firefox                                │
+│  Browsers: chromium, firefox-pw (via Playwright)                    │
 │  Tools:    xdotool, scrot, xclip, curl, wget, jq, Node.js 22      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -54,7 +54,7 @@ The Desktop feature provides project-scoped Docker containers with a virtual dis
 | File | Role |
 |------|------|
 | `electron/services/desktop-service.ts` | Docker container lifecycle — start, stop, restart, rebuild, exec, screenshot |
-| `electron/services/desktop-tools.ts` | 18 agent `ToolDefinition`s (mouse, keyboard, screenshot, clipboard, browser, exec) |
+| `electron/services/desktop-tools.ts` | Agent `ToolDefinition`s (mouse, keyboard, screenshot, clipboard, browser, exec) |
 | `electron/ipc/desktop.ts` | IPC handlers with input validation — bridges renderer ↔ `DesktopService` |
 | `electron/services/pi-session-config.ts` | Wires desktop tools into agent sessions when enabled |
 | `src/stores/desktop-store.ts` | Zustand store — per-project state, availability check, tools toggle, rebuild |
@@ -123,7 +123,7 @@ Mode resets to **Observe** when the container restarts (port change).
 Built from `resources/docker/desktop/Dockerfile` on first use. Contains:
 
 - **Display stack:** Xvfb (virtual framebuffer), fluxbox (window manager), x11vnc, websockify + noVNC
-- **Browsers:** Chromium, Firefox (with international font support)
+- **Browsers:** Chromium, Firefox (via Playwright, with international font support)
 - **Agent tools:** xdotool (mouse/keyboard), scrot (screenshots), xclip (clipboard)
 - **Dev tools:** Node.js 22, curl, wget, jq, xterm, net-tools
 - **Ports:** 5900 (VNC), 6080 (noVNC/WebSocket)

@@ -189,7 +189,7 @@ export function createDesktopTools(
     {
       name: 'desktop_screenshot',
       label: 'Desktop Screenshot',
-      description: 'Take a screenshot of the desktop virtual display. Returns a PNG image you can analyze to determine coordinates for clicking, reading text, etc.',
+      description: 'Take a screenshot of the desktop virtual display (1920×1080). Returns a PNG image you can analyze to determine coordinates for clicking, reading text, etc.',
       parameters: Type.Object({}),
       async execute() {
         const base64 = await service.screenshotDesktop(projectPath);
@@ -286,7 +286,7 @@ export function createDesktopTools(
     {
       name: 'desktop_open_browser',
       label: 'Desktop Open Browser',
-      description: 'Open a URL in a browser inside the desktop. Launches Chromium by default. The browser runs in the virtual display — use desktop_screenshot to see the page.',
+      description: 'Open a URL in a browser inside the desktop (1920×1080). Launches Chromium by default. The browser opens maximised — use desktop_screenshot to see the page.',
       parameters: Type.Object({
         url: Type.String({ description: 'URL to open (e.g. "https://example.com" or "http://localhost:3000")' }),
         browser: Type.Optional(Type.Union([
