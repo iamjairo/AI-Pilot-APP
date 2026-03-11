@@ -2,6 +2,11 @@
 
 All notable changes to Pilot are documented here, grouped by date.
 
+## 2026-03-11
+
+### Fixed
+- **Build crash on launch** — Rollup's `_interopNamespaceDefault` helper crashed when CJS modules (e.g. `ws`) had inherited prototype properties; fixed regex in `fixInteropPlugin` to match actual variable names in bundled output
+
 ## 2026-03-10
 
 ### Added

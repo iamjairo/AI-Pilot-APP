@@ -24,8 +24,8 @@ function fixInteropPlugin() {
       for (const file of Object.values(bundle)) {
         if (file.type === 'chunk' && file.code && file.code.includes('_interopNamespaceDefault')) {
           file.code = file.code.replace(
-            /const (d\d) = Object\.getOwnPropertyDescriptor\((e\d), (k\d)\);/g,
-            'const $1 = Object.getOwnPropertyDescriptor($2, $3); if (!$1) continue;'
+            /const (\w+) = Object\.getOwnPropertyDescriptor\((\w+), (\w+)\);\n(\s*)Object\.defineProperty/g,
+            'const $1 = Object.getOwnPropertyDescriptor($2, $3);\n$4if (!$1) continue;\n$4Object.defineProperty'
           );
         }
       }
