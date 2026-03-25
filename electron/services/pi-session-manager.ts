@@ -238,6 +238,17 @@ export class PilotSessionManager {
     return session.fork(entryId);
   }
 
+  /** Get user messages with their entry IDs for forking / regeneration. */
+  getForkPoints(tabId: string): Array<{ entryId: string; text: string }> {
+    const session = this.sessions.get(tabId);
+    if (!session) return [];
+    try {
+      return session.getUserMessagesForForking();
+    } catch {
+      return [];
+    }
+  }
+
   getSession(tabId: string): AgentSession | undefined {
     return this.sessions.get(tabId);
   }
@@ -426,6 +437,17 @@ export class PilotSessionManager {
 
   getModelRegistry(): ModelRegistry {
     return this.modelRegistry;
+  }
+
+  /** Get the raw SDK messages for a session (used by export). */
+  getRawMessages(tabId: string): unknown[] {
+    const session = this.sessions.get(tabId);
+    if (!session) return [];
+    try {
+      return session.state.messages;
+    } catch {
+      return [];
+    }
   }
 
   /** Get displayable chat history from a session's persisted entries */
