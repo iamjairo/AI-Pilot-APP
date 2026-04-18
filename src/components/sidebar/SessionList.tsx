@@ -87,6 +87,7 @@ export function SessionList() {
     [tabs, projectPath]
   );
 
+
   const sessionsRef = useSessionStore(s => s.sessions);
 
   // Historical sessions, excluding sessions that are currently open as active chats

@@ -42,6 +42,24 @@ export interface CustomTheme {
   syntax?: Record<string, string>;
 }
 
+// ─── Ollama ────────────────────────────────────────────────────────────
+
+/** A manually-added Ollama cloud model entry. */
+export type OllamaCloudModel = {
+  /** Model ID as Ollama knows it (e.g. 'GLM-5.1', stored as 'GLM-5.1:cloud') */
+  id: string;
+  /** Human-readable display name (e.g. 'GLM 5.1 Cloud') */
+  name?: string;
+  /** Context window in tokens. Default: 131072 */
+  contextWindow?: number;
+  /** Max output tokens. Default: 16384 */
+  maxTokens?: number;
+  /** Whether the model supports reasoning/thinking. Default: false */
+  reasoning?: boolean;
+  /** Whether the model supports image input. Default: false */
+  vision?: boolean;
+};
+
 export interface PilotAppSettings {
   /** Custom pi agent config directory. Default: ~/.config/pilot */
   piAgentDir: string;
@@ -109,7 +127,23 @@ export interface PilotAppSettings {
     /** Brave Search API key. Get one free at https://api.search.brave.com/ */
     apiKey?: string;
   };
+
+  /** Ollama local LLM configuration */
+  ollama?: {
+    /** Enable Ollama integration. Default: false */
+    enabled: boolean;
+    /** Ollama API endpoint URL. Default: 'http://localhost:11434' */
+    endpoint: string;
+    /** Optional API key (for remote/proxied Ollama instances). Default: '' (no key) */
+    apiKey?: string;
+    /** Manually-added cloud models not returned by ollama.list() */
+    cloudModels?: OllamaCloudModel[];
+    /** Default model ID (local or cloud) for new sessions. E.g. 'llama3.1:8b' or 'GLM-5.1:cloud' */
+    defaultModel?: string;
+  };
 }
+
+
 
 // MCP (Model Context Protocol) types
 export type McpTransportType = 'stdio' | 'sse' | 'streamable-http';

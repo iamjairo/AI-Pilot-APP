@@ -10,7 +10,8 @@ import {
 import type { TextContent, ThinkingContent } from '@mariozechner/pi-ai';
 import { extractLastAssistantText } from '../utils/message-utils';
 import { StagedDiffManager } from './staged-diffs';
-import { getPiAgentDir } from './app-settings';
+import { getPiAgentDir, loadAppSettings } from './app-settings';
+import { getLogger } from './logger';
 import { MemoryManager } from './memory-manager';
 import {
   PILOT_AUTH_FILE,
@@ -184,13 +185,132 @@ export class PilotSessionManager {
     const session = this.sessions.get(tabId);
     if (!session) throw new Error(`No session for tab ${tabId}`);
 
+    const modelInfo = session.model;
+    const log = getLogger('session');
+    log.info(`Prompt on tab ${tabId}: model=${modelInfo ? modelInfo.provider + '/' + modelInfo.id : 'none'}, streaming=${session.state.isStreaming}`);
+
     // Track the user message for auto-extraction
     this.lastUserMessages.set(tabId, text);
 
-    if (session.state.isStreaming) {
-      await session.followUp(text);
-    } else {
-      await session.prompt(text);
+    // For Ollama models, do a quick pre-flight check to catch "model not found" errors
+    // before the SDK hangs on a streaming request that returns 404
+    if (modelInfo?.provider === 'ollama') {
+      const valid = await this.preflightOllamaModel(tabId, modelInfo);
+      if (!valid) return; // error already sent to renderer
+    }
+
+    // Race the prompt against a timeout — the SDK can hang silently if the
+    // LLM provider returns an HTTP error during streaming (e.g. Ollama 404)
+    const PROMPT_TIMEOUT_MS = 30_000;
+    const isOllama = modelInfo?.provider === 'ollama';
+    let receivedFirstEvent = false;
+
+    // Listen for the first streaming event to confirm the model responded
+    const onFirstEvent = () => { receivedFirstEvent = true; };
+    session.on('text', onFirstEvent);
+    session.on('thinking', onFirstEvent);
+
+    // Timeout ID for cleanup
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    try {
+      const promptPromise = session.state.isStreaming
+        ? session.followUp(text)
+        : session.prompt(text);
+
+      // Timeout: if no first byte received, abort and show error; if partial response
+      // received, abort and notify the user that the response timed out after partial output.
+      const actualTimeoutMs = isOllama ? PROMPT_TIMEOUT_MS : 300_000;
+      const timeoutPromise = new Promise<'timeout'>((resolve) => {
+        timeoutId = setTimeout(() => resolve('timeout'), actualTimeoutMs);
+      });
+
+      const result = await Promise.race([promptPromise, timeoutPromise]);
+
+      // Clear timeout if prompt won the race
+      if (timeoutId !== null) clearTimeout(timeoutId);
+
+      if (result === 'timeout') {
+        const timeoutSec = actualTimeoutMs / 1000;
+        if (!receivedFirstEvent) {
+          // No response at all — abort and show error
+          log.warn(`Prompt timed out after ${timeoutSec}s with no response for model ${modelInfo?.provider}/${modelInfo?.id}`);
+          session.abort();
+          const hint = isOllama
+            ? ` The model "${modelInfo?.id}" may not exist in Ollama. Check the name matches exactly (Ollama treats colons as tag separators, e.g. "model:tag"), or run \`ollama list\` to see available models.`
+            : '';
+          this.sendToRenderer(IPC.AGENT_EVENT, {
+            tabId,
+            event: {
+              type: 'system_message',
+              content: `⚠️ No response received from ${modelInfo?.provider}/${modelInfo?.id} after ${timeoutSec}s. The request may have failed.${hint}`,
+            },
+          });
+        } else {
+          // Partial response received — abort and notify that output was truncated
+          log.warn(`Prompt timed out after ${timeoutSec}s with partial response for model ${modelInfo?.provider}/${modelInfo?.id}`);
+          session.abort();
+          this.sendToRenderer(IPC.AGENT_EVENT, {
+            tabId,
+            event: {
+              type: 'system_message',
+              content: `⚠️ Response from ${modelInfo?.provider}/${modelInfo?.id} timed out after ${timeoutSec}s. The output may be incomplete.`,
+            },
+          });
+        }
+        // Clear the streaming state so the user can try again
+        this.forwardEventToRenderer(tabId, { type: 'turn_end' });
+
+        // Suppress unhandled rejection from the still-running promptPromise
+        promptPromise.catch(() => {});
+      }
+    } catch (err) {
+      log.error(`Prompt failed on tab ${tabId}: ${err}`);
+      throw err;
+    } finally {
+      session.off('text', onFirstEvent);
+      session.off('thinking', onFirstEvent);
+    }
+  }
+
+  /** Pre-flight validation for Ollama models — catches "model not found" before the SDK hangs */
+  private async preflightOllamaModel(tabId: string, model: { provider: string; id: string }): Promise<boolean> {
+    try {
+      // Read configured endpoint from app settings (not hardcoded localhost)
+      const settings = loadAppSettings();
+      const endpoint = (settings.ollama?.endpoint || 'http://localhost:11434').replace(/\/+$/, '') + '/v1';
+      const apiKey = settings.ollama?.apiKey || undefined;
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
+      const resp = await fetch(`${endpoint}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: model.id,
+          messages: [{ role: 'user', content: 'ok' }],
+          max_tokens: 1,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (resp.status === 404) {
+        const body = await resp.text().catch(() => '');
+        const match = body.match(/model.*not found/i);
+        const hint = `The model "${model.id}" was not found in Ollama. Ollama treats colons as tag separators (e.g. "model:tag"), so check the name matches exactly. Run \`ollama list\` to see available models.`;
+        getLogger('session').warn(`Ollama pre-flight failed: ${match ? body : resp.status}`);
+        this.sendToRenderer(IPC.AGENT_EVENT, {
+          tabId,
+          event: { type: 'system_message', content: `❌ ${hint}` },
+        });
+        this.forwardEventToRenderer(tabId, { type: 'turn_end' });
+        return false;
+      }
+      return true;
+    } catch {
+      // Pre-flight is best-effort — if it fails, let the prompt proceed
+      return true;
     }
   }
 
