@@ -26,23 +26,36 @@ function replaceUntilStable(input: string, pattern: RegExp, replacement: string)
  */
 function htmlToText(html: string): string {
   let text = html;
-  // Remove script and style blocks
-  text = replaceUntilStable(text, /<script[\s\S]*?<\/script>/gi, '');
-  text = replaceUntilStable(text, /<style[\s\S]*?<\/style>/gi, '');
-  // Convert block elements to newlines
-  text = text.replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, '\n');
-  text = text.replace(/<br\s*\/?>/gi, '\n');
-  // Strip remaining tags
-  text = text.replace(/<[^>]+>/g, '');
-  // Decode common HTML entities
-  text = text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+  let previous: string;
+
+  // Repeat sanitization until no further changes occur. This prevents
+  // malformed/overlapping tag patterns from reappearing after decoding.
+  do {
+    previous = text;
+    // Remove script and style blocks
+    text = text.replace(/<script[\s\S]*?<\/script>/gi, '');
+    text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
+    // Convert block elements to newlines
+    text = text.replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n');
+    text = text.replace(/<br\s*\/?>/gi, '\n');
+    // Strip remaining tags
+    text = text.replace(/<[^>]+>/g, '');
+    // Decode common HTML entities
+    text = text
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&#(\d+);/g, (match, n) => {
+        const codePoint = Number(n);
+        return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+          ? String.fromCodePoint(codePoint)
+          : match;
+      });
+  } while (text !== previous);
+
   // Collapse whitespace
   text = text.replace(/[ \t]+/g, ' ');
   text = text.replace(/\n{3,}/g, '\n\n');
