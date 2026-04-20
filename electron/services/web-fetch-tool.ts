@@ -27,13 +27,13 @@ function replaceUntilStable(input: string, pattern: RegExp, replacement: string)
 function htmlToText(html: string): string {
   let text = html;
   // Remove script and style blocks
-  text = text.replace(/<script[\s\S]*?<\/script>/gi, '');
-  text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
+  text = replaceUntilStable(text, /<script[\s\S]*?<\/script>/gi, '');
+  text = replaceUntilStable(text, /<style[\s\S]*?<\/style>/gi, '');
   // Convert block elements to newlines
   text = text.replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, '\n');
   text = text.replace(/<br\s*\/?>/gi, '\n');
   // Strip remaining tags
-  text = text.replace(/<[^>]+>/g, '');
+  text = replaceUntilStable(text, /<[^>]+>/g, '');
   // Decode common HTML entities (`&amp;` must be decoded last to avoid double-unescaping)
   text = text
     .replace(/&lt;/g, '<')
