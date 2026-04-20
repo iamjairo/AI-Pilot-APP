@@ -6,6 +6,21 @@ const MAX_OUTPUT_LINES = 2000;
 const DEFAULT_TIMEOUT = 30_000;
 
 /**
+ * Repeatedly apply a replacement until the text no longer changes.
+ * Prevents incomplete multi-character sanitization where dangerous
+ * patterns can reappear after a single replacement pass.
+ */
+function replaceUntilStable(input: string, pattern: RegExp, replacement: string): string {
+  let previous: string;
+  let current = input;
+  do {
+    previous = current;
+    current = current.replace(pattern, replacement);
+  } while (current !== previous);
+  return current;
+}
+
+/**
  * Strip HTML tags and decode common entities to produce readable text.
  * Removes script/style blocks entirely.
  */
