@@ -1,6 +1,7 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { join, extname, resolve, normalize } from 'path';
 import { existsSync } from 'fs';
+import rateLimit from 'express-rate-limit';
 import { CompanionAuth } from './companion-server-types';
 import packageJson from '../../package.json';
 
@@ -27,6 +28,14 @@ export function setupCompanionRoutes(
 
   // JSON middleware for API routes
   app.use(express.json());
+
+  const attachmentsRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 60, // limit each IP to 60 attachment requests per minute
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests' },
+  });
 
   // Companion mode detection endpoint
   // The renderer checks this to know it's running in companion mode
@@ -58,7 +67,7 @@ export function setupCompanionRoutes(
 
   // Serve attachment files (images saved by the renderer)
   // Validates the path is inside a .pilot/attachments directory.
-  app.get('/api/attachments', (req: Request, res: Response) => {
+  app.get('/api/attachments', attachmentsRateLimiter, (req: Request, res: Response) => {
     const filePath = req.query.path as string | undefined;
     if (!filePath) {
       res.status(403).json({ error: 'Forbidden' });
