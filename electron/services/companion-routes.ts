@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import rateLimit from 'express-rate-limit';
 import { join, extname, resolve, normalize } from 'path';
 import { existsSync } from 'fs';
 import { CompanionAuth } from './companion-server-types';
@@ -16,6 +17,14 @@ export function setupCompanionRoutes(
     auth: CompanionAuth;
   }
 ): void {
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 300, // max requests per client per window
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use(limiter);
+
   // CORS headers - restrict to same-origin; companion clients connect via WebSocket, not CORS
   app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Access-Control-Allow-Origin', 'null');
