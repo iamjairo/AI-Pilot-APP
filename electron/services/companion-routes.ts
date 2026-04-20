@@ -2,7 +2,6 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { join, extname, resolve, sep } from 'path';
 import { existsSync, realpathSync } from 'fs';
-import rateLimit from 'express-rate-limit';
 import { CompanionAuth } from './companion-server-types';
 import packageJson from '../../package.json';
 
