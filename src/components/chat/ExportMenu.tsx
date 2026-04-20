@@ -10,6 +10,7 @@ import { Download, FileText, FileJson, Clipboard, Check } from 'lucide-react';
 import { IPC } from '../../../shared/ipc';
 import type { SessionExportOptions, SessionExportFormat, SessionExportResult } from '../../../shared/types';
 import { useTabStore } from '../../stores/tab-store';
+import { invoke } from '../../lib/ipc-client';
 
 export default function ExportMenu() {
   const [open, setOpen] = useState(false);
@@ -69,7 +70,7 @@ export default function ExportMenu() {
       projectPath: activeTab?.projectPath || undefined,
     };
     try {
-      await window.api.invoke(IPC.SESSION_EXPORT, activeTabId, options, meta);
+      await invoke(IPC.SESSION_EXPORT, activeTabId, options, meta);
       setOpen(false);
     } catch (err) {
       console.error('Export failed:', err);
@@ -94,7 +95,7 @@ export default function ExportMenu() {
       projectPath: activeTab?.projectPath || undefined,
     };
     try {
-      await window.api.invoke(IPC.SESSION_EXPORT_CLIPBOARD, activeTabId, options, meta);
+      await invoke(IPC.SESSION_EXPORT_CLIPBOARD, activeTabId, options, meta);
       setCopied(true);
       if (copiedTimerRef.current) {
         clearTimeout(copiedTimerRef.current);

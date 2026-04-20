@@ -9,6 +9,7 @@ import { Icon } from '../shared/Icon';
 import { openTabSession, useWiredSessionsStore } from '../../hooks/useWorkspacePersistence';
 import { IPC } from '../../../shared/ipc';
 import type { SessionExportOptions } from '../../../shared/types';
+import { invoke } from '../../lib/ipc-client';
 import { relativeTime, truncate } from '../../lib/utils';
 
 type ChatStatus = 'idle' | 'empty' | 'streaming' | 'pending' | 'error';
@@ -159,7 +160,7 @@ export function SessionList() {
     };
     const meta = { title: session.title, projectPath: session.projectPath };
     try {
-      await window.api.invoke(IPC.SESSION_EXPORT_BY_PATH, session.path, options, meta);
+      await invoke(IPC.SESSION_EXPORT_BY_PATH, session.path, options, meta);
     } catch (err) {
       showExportError(err instanceof Error ? err.message : 'Export failed');
     }
@@ -176,7 +177,7 @@ export function SessionList() {
     };
     const meta = { title: session.title, projectPath: session.projectPath };
     try {
-      await window.api.invoke(IPC.SESSION_EXPORT_CLIPBOARD_BY_PATH, session.path, options, meta);
+      await invoke(IPC.SESSION_EXPORT_CLIPBOARD_BY_PATH, session.path, options, meta);
     } catch (err) {
       showExportError(err instanceof Error ? err.message : 'Copy to clipboard failed');
     }

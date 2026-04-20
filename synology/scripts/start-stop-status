@@ -1,0 +1,85 @@
+#!/bin/sh
+set -eu
+
+PACKAGE_ROOT="${SYNOPKG_PKGDEST}/app"
+CONFIG_DIR="${SYNOPKG_PKGVAR}/config"
+RUN_DIR="${SYNOPKG_PKGVAR}/run"
+LOG_DIR="${SYNOPKG_PKGVAR}/log"
+PID_FILE="${RUN_DIR}/pilot-backend.pid"
+LOG_FILE="${LOG_DIR}/pilot-backend.log"
+ENV_FILE="${CONFIG_DIR}/pilot.env"
+
+find_node_bin() {
+  for candidate in \
+    /var/packages/Node.js_v20/target/usr/local/bin/node \
+    /volume1/@appstore/Node.js_v20/usr/local/bin/node \
+    /usr/local/bin/node \
+    /bin/node
+  do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+is_running() {
+  [ -f "$PID_FILE" ] || return 1
+  PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+  [ -n "$PID" ] || return 1
+  kill -0 "$PID" 2>/dev/null
+}
+
+mkdir -p "$CONFIG_DIR" "$RUN_DIR" "$LOG_DIR"
+
+if [ -f "$ENV_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+fi
+
+[ "${PILOT_COMPANION_PORT+x}" = x ] && export PILOT_COMPANION_PORT
+[ "${PILOT_COMPANION_PROTOCOL+x}" = x ] && export PILOT_COMPANION_PROTOCOL
+[ "${PILOT_COMPANION_AUTO_START+x}" = x ] && export PILOT_COMPANION_AUTO_START
+
+NODE_BIN="$(find_node_bin)"
+
+export HOME="${SYNOPKG_PKGVAR}"
+export PATH="$(dirname "$NODE_BIN"):${PATH}"
+export PILOT_APP_ROOT="${PACKAGE_ROOT}"
+export PILOT_APP_DIR="${CONFIG_DIR}"
+export PILOT_DOCS_DIR="${PACKAGE_ROOT}/docs/user"
+export PILOT_COMPANION_AUTO_START="${PILOT_COMPANION_AUTO_START:-true}"
+
+case "${1:-}" in
+  start)
+    if is_running; then
+      exit 0
+    fi
+    cd "$PACKAGE_ROOT"
+    nohup "$NODE_BIN" "${PACKAGE_ROOT}/backend/index.cjs" >>"$LOG_FILE" 2>&1 &
+    echo "$!" >"$PID_FILE"
+    ;;
+  stop)
+    if ! is_running; then
+      rm -f "$PID_FILE"
+      exit 0
+    fi
+    kill "$(cat "$PID_FILE")"
+    rm -f "$PID_FILE"
+    ;;
+  status)
+    if is_running; then
+      exit 0
+    fi
+    exit 1
+    ;;
+  restart)
+    "$0" stop || true
+    "$0" start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|status|restart}" >&2
+    exit 1
+    ;;
+esac

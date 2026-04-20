@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { IPC } from '../../shared/ipc';
 import { useDesktopStore } from '../stores/desktop-store';
 import type { DesktopState } from '../../shared/types';
+import { on } from '../lib/ipc-client';
 
 /**
  * Listen for DESKTOP_EVENT push events and update the store.
@@ -12,7 +13,7 @@ import type { DesktopState } from '../../shared/types';
  */
 export function useDesktopEvents() {
   useEffect(() => {
-    const unsub = window.api.on(
+    const unsub = on(
       IPC.DESKTOP_EVENT,
       (payload: { projectPath: string } & Partial<DesktopState>) => {
         useDesktopStore.getState().handleEvent(payload);

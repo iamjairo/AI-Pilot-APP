@@ -83,6 +83,8 @@ export interface PilotAppSettings {
   companionProtocol?: 'http' | 'https';
   /** Whether to automatically start the companion server on app launch. Default: false */
   companionAutoStart?: boolean;
+  /** Optional remote backend URL for thin-client mode. Example: https://nas.local:18088 */
+  remoteBackendUrl?: string;
   /** Whether to automatically start persistent dev commands on project launch */
   autoStartDevServer?: boolean;
   /** Glob patterns to hide in the file tree, using .gitignore syntax (e.g. 'node_modules', '*.log', 'dist/'). */
@@ -141,6 +143,15 @@ export interface PilotAppSettings {
     /** Default model ID (local or cloud) for new sessions. E.g. 'llama3.1:8b' or 'GLM-5.1:cloud' */
     defaultModel?: string;
   };
+}
+
+export interface RemoteBackendHealthResponse {
+  ok: true;
+  service: 'pilot-backend';
+  appVersion: string;
+  protocol: 'http' | 'https';
+  tokenRequired: boolean;
+  companion: true;
 }
 
 

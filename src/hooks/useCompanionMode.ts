@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { isCompanionMode } from '../lib/ipc-client';
 
 interface LayoutMode {
   isCompanion: boolean;
@@ -38,8 +39,7 @@ export function useLayoutMode(): LayoutMode {
 
   // Compute layout mode from viewport width and environment
   const layoutMode = useMemo<LayoutMode>(() => {
-    // Detect companion mode - running in browser without Electron IPC
-    const isCompanion = typeof window.api === 'undefined';
+    const isCompanion = isCompanionMode();
 
     // Detect iOS from user agent
     const userAgent = window.navigator.userAgent.toLowerCase();
@@ -47,7 +47,7 @@ export function useLayoutMode(): LayoutMode {
 
     // Determine platform
     let platform: 'electron' | 'ios' | 'browser';
-    if (!isCompanion) {
+    if (window.api?.platform === 'darwin' || window.api?.platform === 'win32' || window.api?.platform === 'linux') {
       // window.api exists - running in Electron
       platform = 'electron';
     } else if (isIOS) {

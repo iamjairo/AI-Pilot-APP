@@ -42,12 +42,21 @@ npm run dev:trace
 
 ```bash
 npm run build          # Compile only (out/)
+npm run build:backend  # Build standalone backend service (out/backend)
 npm run build:mac      # Build + package for macOS
 npm run build:win      # Build + package for Windows
 npm run build:linux    # Build + package for Linux
+npm run build:spk      # Build Synology DSM package (release/synology)
 ```
 
-Packaged output goes to `release/`. CI builds only on tag push.
+Packaged output goes to `release/`.
+
+Native-runner packaging in GitHub Actions lives in:
+
+- `.github/workflows/ci.yml` — release packaging on native macOS, Windows, and Linux runners for tag pushes, plus manual `workflow_dispatch`
+- `.github/workflows/nightly.yml` — nightly native-runner packaging and artifact publication
+
+Synology packaging is documented separately in [`docs/SYNOLOGY.md`](SYNOLOGY.md). The current `.spk` packaging flow targets a standalone backend service and expects Synology Node.js v20 on the NAS.
 
 ## Linting
 

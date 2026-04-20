@@ -3,6 +3,7 @@ import { ArrowLeft, BookOpen } from 'lucide-react';
 import { useTabStore } from '../../stores/tab-store';
 import { IPC } from '../../../shared/ipc';
 import { MarkdownContent } from './docs-markdown';
+import { invoke } from '../../lib/ipc-client';
 
 // Page title map for breadcrumbs
 const PAGE_TITLES: Record<string, string> = {
@@ -32,8 +33,7 @@ export function DocsViewer() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    window.api
-      .invoke(IPC.DOCS_READ, currentPage)
+    invoke(IPC.DOCS_READ, currentPage)
       .then((result) => {
         if (!cancelled) {
           setContent(result as string | null);

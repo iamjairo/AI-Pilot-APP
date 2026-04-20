@@ -33,6 +33,7 @@ Start with OVERVIEW.md for a high-level understanding, then follow the reading o
 | [DESKTOP.md](DESKTOP.md) | Desktop virtual display — architecture, Docker container, agent tools, IPC, settings |
 | [COMPANION.md](COMPANION.md) | Companion API spec — HTTPS + WebSocket protocol |
 | [COMPANION-IMPLEMENTATION.md](COMPANION-IMPLEMENTATION.md) | Companion desktop implementation guide |
+| [SYNOLOGY.md](SYNOLOGY.md) | Synology DSM backend packaging and standalone service notes |
 | [PRD.md](PRD.md) | Full product requirements document |
 | [ROADMAP.md](ROADMAP.md) | What's in progress, planned post-MVP, and recently completed |
 | [GLOSSARY.md](GLOSSARY.md) | Definitions for all domain-specific and project-specific terms |

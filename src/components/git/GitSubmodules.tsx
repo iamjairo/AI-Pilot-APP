@@ -6,6 +6,7 @@ import {
 import { useGitStore } from '../../stores/git-store';
 import { IPC } from '../../../shared/ipc';
 import type { GitSubmodule, SubmoduleStatusCode } from '../../../shared/types';
+import { invoke } from '../../lib/ipc-client';
 
 function statusIcon(status: SubmoduleStatusCode, dirty: boolean) {
   if (status === 'conflict') return <AlertCircle className="w-4 h-4 text-error" />;
@@ -18,7 +19,7 @@ function SubmoduleRow({ sub }: { sub: GitSubmodule }) {
   const { initSubmodule, deinitSubmodule, updateSubmodule, syncSubmodule, isSubmoduleLoading } = useGitStore();
 
   const handleDeinit = useCallback(async () => {
-    const confirmed = await window.api.invoke(IPC.SHELL_CONFIRM_DIALOG, {
+    const confirmed = await invoke(IPC.SHELL_CONFIRM_DIALOG, {
       title: 'Deinitialize Submodule',
       message: `Deinitialize submodule "${sub.name}"?`,
       detail: 'This removes its working tree. Any uncommitted changes will be lost.',

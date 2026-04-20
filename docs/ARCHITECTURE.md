@@ -1,8 +1,19 @@
 # Architecture
 
-> Last updated: 2026-03-10
+> Last updated: 2026-04-20
 
-Pilot is an Electron desktop app with strict three-process isolation. The **main process** owns all business logic; the **renderer** is a pure React app with no Node.js access; a **preload script** bridges them. All inter-process calls use typed IPC channels. The same renderer code also runs in a remote browser via a WebSocket-based companion mode.
+Pilot is an Electron desktop app with strict three-process isolation. The **main process** owns all business logic; the **renderer** is a pure React app with no Node.js access; a **preload script** bridges them. All inter-process calls use typed IPC channels. The same renderer code also runs in a remote browser via a WebSocket-based companion mode, and Electron itself can now run as a **remote thin client** against a separate Pilot backend.
+
+## Runtime Modes
+
+| Mode | How it starts | What runs locally |
+|---|---|---|
+| Desktop | default | Electron shell + embedded backend runtime |
+| Backend-only | `--backend-only` or `PILOT_BACKEND_ONLY=true` | Backend runtime only; no `BrowserWindow` |
+| Remote thin client | `--remote-backend-url=...`, `PILOT_REMOTE_BACKEND_URL`, or saved `remoteBackendUrl` | Electron shell only; backend IPC routed over WebSocket |
+| Browser companion | Companion server URL in a browser | Renderer only; `window.api` polyfilled over WebSocket |
+
+In remote thin-client mode, local Electron IPC is still used for native shell concerns such as dialogs, exports, packaged docs, menu events, and app chrome updates. Backend functionality continues over the remote transport.
 
 ## Component Map
 
@@ -149,16 +160,16 @@ Service emits event
       → companion IPC client routes to same callback
 ```
 
-### Companion Access
+### Companion / Remote Backend Access
 
 ```
-Companion browser loads companion UI bundle
-  → ipc-client.ts detects window.api is absent → enters WebSocket mode
-  → All window.api.invoke() calls → WebSocket message to CompanionServer
+Remote browser or remote Electron client enables external backend mode
+  → ipc-client.ts resolves remote backend URL / WS URL
+  → local-only Electron channels stay on window.api
+  → backend invoke/on/send calls go over WebSocket to CompanionServer
     → CompanionServer validates token → forwards to main process handler
       → response sent back over WebSocket
-  → All window.api.on() subscriptions → registered in CompanionIpcBridge
-    → Every main→renderer push event → forwarded over WebSocket to companion
+  → main→renderer push events are forwarded through CompanionIpcBridge
 ```
 
 ## Key Abstractions
@@ -179,10 +190,10 @@ Companion browser loads companion UI bundle
 
 ### Universal IPC Client (`src/lib/ipc-client.ts`)
 
-- **What**: A dual-mode client. In Electron it wraps `window.api`. In a browser companion client it routes through a WebSocket.
+- **What**: A transport client that supports local Electron IPC, browser companion WebSocket IPC, and Electron thin-client routing to a remote backend.
 - **Where**: `src/lib/ipc-client.ts`
 - **Used by**: All stores and hooks.
-- **Why it matters**: Enables the same React code to run on both Electron and a remote browser with zero changes.
+- **Why it matters**: Enables the same React code to run on local Electron, remote Electron thin-client launches, and browser companion clients with one shared transport layer.
 
 ### StagedDiff Flow
 

@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+CONFIG_DIR="${SYNOPKG_PKGVAR}/config"
+RUN_DIR="${SYNOPKG_PKGVAR}/run"
+LOG_DIR="${SYNOPKG_PKGVAR}/log"
+DEFAULT_ENV="${SYNOPKG_PKGDEST}/conf/pilot.env"
+TARGET_ENV="${CONFIG_DIR}/pilot.env"
+SETTINGS_FILE="${CONFIG_DIR}/app-settings.json"
+
+mkdir -p "$CONFIG_DIR" "$RUN_DIR" "$LOG_DIR"
+
+if [ -f "$DEFAULT_ENV" ] && [ ! -f "$TARGET_ENV" ]; then
+  cp "$DEFAULT_ENV" "$TARGET_ENV"
+fi
+
+if [ ! -f "$SETTINGS_FILE" ]; then
+  cat >"$SETTINGS_FILE" <<'EOF'
+{
+  "companionAutoStart": true,
+  "companionPort": 18088,
+  "companionProtocol": "https"
+}
+EOF
+fi

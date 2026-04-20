@@ -1,65 +1,17 @@
 import { app, BrowserWindow, ipcMain, Menu, MenuItemConstructorOptions, net, protocol, shell } from 'electron';
 import { join } from 'path';
-import { readFileSync, readdirSync } from 'fs';
 import { initLogger, getLogger, shutdownLogger } from '../services/logger';
-import { PilotSessionManager } from '../services/pi-session-manager';
-import { DevCommandsService } from '../services/dev-commands';
-import { ExtensionManager } from '../services/extension-manager';
-import { TerminalService } from '../services/terminal-service';
-import { registerAgentIpc, setPromptLibraryRef } from '../ipc/agent';
-import { registerModelIpc } from '../ipc/model';
-import { registerSandboxIpc } from '../ipc/sandbox';
-import { registerSessionIpc } from '../ipc/session';
-import { registerSettingsIpc } from '../ipc/settings';
-import { registerAuthIpc } from '../ipc/auth';
-import { registerGitIpc } from '../ipc/git';
-import { registerProjectIpc } from '../ipc/project';
-import { registerDevCommandsIpc } from '../ipc/dev-commands';
-import { registerExtensionsIpc } from '../ipc/extensions';
-import { registerWorkspaceIpc } from '../ipc/workspace';
-import { registerShellIpc } from '../ipc/shell';
-import { registerTerminalIpc } from '../ipc/terminal';
-import { registerMemoryIpc } from '../ipc/memory';
-import { registerTasksIpc } from '../ipc/tasks';
-import { registerPromptsIpc } from '../ipc/prompts';
-import { registerCompanionIpc } from '../ipc/companion';
-import { registerSubagentIpc } from '../ipc/subagent';
-import { registerAttachmentIpc } from '../ipc/attachment';
-import { registerMcpIpc } from '../ipc/mcp';
-import { registerDesktopIpc } from '../ipc/desktop';
-import { registerThemeIpc } from '../ipc/theme';
-import { DesktopService } from '../services/desktop-service';
-import { ThemeService } from '../services/theme-service';
-import { OllamaService } from '../services/ollama-service';
-import { registerOllamaIpc } from '../ipc/ollama';
-import { McpManager } from '../services/mcp-manager';
-import { PromptLibrary } from '../services/prompt-library';
-import { CommandRegistry } from '../services/command-registry';
-import { CompanionAuth } from '../services/companion-auth';
-import { CompanionServer } from '../services/companion-server';
-import { CompanionDiscovery } from '../services/companion-discovery';
-import { CompanionRemote } from '../services/companion-remote';
-import { companionBridge, syncAllHandlers } from '../services/companion-ipc-bridge';
-import { ensureTLSCert } from '../services/companion-tls';
-import { PILOT_APP_DIR } from '../services/pilot-paths';
 import { loadAppSettings } from '../services/app-settings';
 import { IPC } from '../../shared/ipc';
+import { BackendRuntime } from '../services/backend-runtime';
+import { isBackendOnlyMode, resolveRemoteBackendUrl } from '../utils/runtime-mode';
 
 let mainWindow: BrowserWindow | null = null;
-let sessionManager: PilotSessionManager | null = null;
-let devService: DevCommandsService | null = null;
-let extensionManager: ExtensionManager | null = null;
-let terminalService: TerminalService | null = null;
-let promptLibrary: PromptLibrary | null = null;
-let companionAuth: CompanionAuth | null = null;
-let companionServer: CompanionServer | null = null;
-let companionDiscovery: CompanionDiscovery | null = null;
-let companionRemote: CompanionRemote | null = null;
-let mcpManager: McpManager | null = null;
-let desktopService: DesktopService | null = null;
-let themeService: ThemeService | null = null;
-let ollamaService: OllamaService | null = null;
+const backendRuntime = new BackendRuntime();
 let developerModeEnabled = false;
+const backendOnlyMode = isBackendOnlyMode();
+const remoteBackendUrl = resolveRemoteBackendUrl(process.argv, process.env, loadAppSettings().remoteBackendUrl);
+const remoteClientMode = Boolean(remoteBackendUrl) && !backendOnlyMode;
 
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
@@ -173,7 +125,7 @@ function createWindow() {
   if (settings.theme === 'custom' && settings.customThemeSlug) {
     // Try to read the custom theme for its bg-base color
     try {
-      const ts = themeService!;
+      const ts = backendRuntime.themeService;
       const ct = ts.get(settings.customThemeSlug);
       windowBg = ct?.colors['bg-base'] ?? '#1a1b1e';
       // Estimate foreground from base type
@@ -221,9 +173,15 @@ function createWindow() {
 
   // Load the renderer
   if (process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+    const rendererUrl = new URL(process.env.ELECTRON_RENDERER_URL);
+    if (remoteBackendUrl) {
+      rendererUrl.searchParams.set('remoteBackendUrl', remoteBackendUrl);
+    }
+    mainWindow.loadURL(rendererUrl.toString());
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+      query: remoteBackendUrl ? { remoteBackendUrl } : undefined,
+    });
   }
 
   // Show window when ready to prevent flash
@@ -274,7 +232,13 @@ app.whenReady().then(async () => {
   // Initialize logger first
   initLogger();
   const log = getLogger('main');
-  log.info('Pilot starting', { version: app.getVersion(), platform: process.platform, dev: !!process.env.ELECTRON_RENDERER_URL });
+  log.info('Pilot starting', {
+    version: app.getVersion(),
+    platform: process.platform,
+    dev: !!process.env.ELECTRON_RENDERER_URL,
+    mode: backendOnlyMode ? 'backend-only' : remoteClientMode ? 'remote-client' : 'desktop',
+    remoteBackendUrl,
+  });
 
   // Handle pilot-attachment:// URLs → read local files
   protocol.handle('pilot-attachment', (request) => {
@@ -299,198 +263,19 @@ app.whenReady().then(async () => {
 
     return net.fetch(`file://${resolved}`);
   });
-  // Initialize theme service before createWindow so it can read custom theme colors
-  themeService = new ThemeService();
-
-  // Create window first (needed by terminal service)
-  createWindow();
-
-  // Initialize services
-  sessionManager = new PilotSessionManager();
-  devService = new DevCommandsService();
-  extensionManager = new ExtensionManager();
-  mcpManager = new McpManager();
-  sessionManager.mcpManager = mcpManager;
-  terminalService = mainWindow ? new TerminalService(mainWindow) : null;
-
-  // Initialize Ollama service (registers models in the ModelRegistry if enabled)
-  ollamaService = new OllamaService();
-  ollamaService.init(sessionManager.getModelRegistry());
-
-  // Register IPC handlers
-  registerAgentIpc(sessionManager);
-  registerModelIpc(sessionManager);
-  registerSandboxIpc(sessionManager);
-  registerSessionIpc(sessionManager);
-  registerSettingsIpc(sessionManager);
-  registerAuthIpc(sessionManager);
-  registerGitIpc();
-  registerProjectIpc();
-  registerDevCommandsIpc(devService);
-  registerExtensionsIpc(extensionManager);
-  registerWorkspaceIpc();
-  registerShellIpc();
-  if (terminalService) {
-    registerTerminalIpc(terminalService);
+  if (!backendOnlyMode) {
+    createWindow();
+  } else if (isMac && app.dock) {
+    app.dock.hide();
   }
-  registerMemoryIpc(sessionManager.memoryManager);
-  registerTasksIpc(sessionManager.taskManager);
-  registerSubagentIpc(sessionManager.subagentManager);
-  registerMcpIpc(mcpManager);
-  registerOllamaIpc(ollamaService!);
-  registerAttachmentIpc();
 
-  // Custom themes (themeService already initialized before createWindow)
-  registerThemeIpc(themeService!);
-
-  // Docker sandbox — always register IPC handlers so the renderer gets
-  // graceful responses even when Docker is unavailable or init fails.
-  try {
-    desktopService = new DesktopService();
-    sessionManager.desktopService = desktopService;
-    desktopService.reconcileOnStartup().catch((err) => {
-      console.error('[Desktop] reconcileOnStartup failed:', err);
+  if (!remoteClientMode) {
+    await backendRuntime.start({
+      mainWindow,
+      docsDir: join(app.getAppPath(), 'docs', 'user'),
+      backendOnly: backendOnlyMode,
     });
-  } catch (err) {
-    console.error('[Desktop] Failed to initialize service:', err);
   }
-  registerDesktopIpc(desktopService, sessionManager);
-
-  // Register system commands in the CommandRegistry
-  CommandRegistry.register('memory', 'Memory', 'Open memory panel');
-  CommandRegistry.register('tasks', 'Tasks', 'Open task board');
-  CommandRegistry.register('prompts', 'Prompt Library', 'Open prompt picker');
-  CommandRegistry.register('orchestrate', 'Orchestrator', 'Enter orchestrator mode');
-  CommandRegistry.register('spawn', 'Subagent', 'Quick-spawn a subagent');
-
-  // Initialize companion system
-  companionAuth = new CompanionAuth(PILOT_APP_DIR);
-  companionAuth.init().catch(err => {
-    console.error('Failed to initialize companion auth:', err);
-  });
-  companionDiscovery = new CompanionDiscovery();
-  companionRemote = new CompanionRemote();
-
-  // TLS cert generation is async but we need the server ref for IPC handlers.
-  // Create a deferred init: register IPC handlers immediately, init server async.
-  const companionSettings = {
-    port: loadAppSettings().companionPort ?? 18088,
-    protocol: (loadAppSettings().companionProtocol ?? 'https') as 'http' | 'https',
-  };
-
-  const companionReady = (async () => {
-    try {
-      if (companionSettings.protocol === 'https') {
-        const { cert, key } = await ensureTLSCert(PILOT_APP_DIR);
-        companionServer = new CompanionServer({
-          port: companionSettings.port,
-          protocol: 'https',
-          tlsCert: cert,
-          tlsKey: key,
-          ipcBridge: companionBridge,
-          auth: companionAuth!,
-        });
-      } else {
-        companionServer = new CompanionServer({
-          port: companionSettings.port,
-          protocol: 'http',
-          ipcBridge: companionBridge,
-          auth: companionAuth!,
-        });
-      }
-      log.debug(`Companion server configured (${companionSettings.protocol}:${companionSettings.port}, not yet started)`);
-
-      // Auto-start the companion server if the user has enabled it in settings
-      if (loadAppSettings().companionAutoStart && companionServer) {
-        try {
-          await companionServer.start();
-          const computerName = await CompanionDiscovery.getComputerName();
-          await companionDiscovery!.start(companionServer.port, computerName);
-          console.log('[Companion] Auto-started companion server');
-        } catch (autoErr) {
-          console.error('[Companion] Failed to auto-start companion server:', autoErr);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to initialize companion server:', err);
-    }
-  })();
-
-  // Clean up dev server tunnels when commands stop
-  devService.onCommandStopped = (commandId: string) => {
-    companionRemote?.removeTunnelByCommand(commandId);
-  };
-
-  // Auto-tunnel dev server ports when remote access is active.
-  // When a dev command outputs a localhost URL, create a tunnel for it.
-  devService.onServerUrlDetected = async (commandId: string, localUrl: string) => {
-    if (!companionRemote?.isActive()) return;
-    try {
-      const url = new URL(localUrl);
-      const port = parseInt(url.port, 10);
-      if (!port) return;
-      const commands = devService?.loadConfig() ?? [];
-      const cmd = commands.find(c => c.id === commandId);
-      const label = cmd?.label ?? commandId;
-      const tunnelUrl = await companionRemote.tunnelPort(port, commandId, label, localUrl);
-      if (tunnelUrl) {
-        // Notify renderer of the tunnel
-        for (const win of BrowserWindow.getAllWindows()) {
-          win.webContents.send(IPC.DEV_SERVER_URL, commandId, localUrl, tunnelUrl);
-        }
-        companionBridge.forwardEvent(IPC.DEV_SERVER_URL, [commandId, localUrl, tunnelUrl]);
-      }
-    } catch (err) {
-      console.error('[Companion] Failed to auto-tunnel dev server:', err);
-    }
-  };
-
-  // When Tailscale remote is enabled, swap server TLS certs to Tailscale-issued ones.
-  // Store originals so we can restore when Tailscale is disconnected.
-  let originalTlsCert: Buffer | null = null;
-  let originalTlsKey: Buffer | null = null;
-
-  companionRemote.onTlsCertChanged = (cert: Buffer, key: Buffer) => {
-    if (companionServer) {
-      // Save originals on first swap
-      if (!originalTlsCert) {
-        originalTlsCert = companionServer['config'].tlsCert;
-        originalTlsKey = companionServer['config'].tlsKey;
-      }
-      companionServer.updateTlsCerts(cert, key);
-    }
-  };
-
-  // Restore self-signed certs when remote is disabled
-  const origDispose = companionRemote.dispose.bind(companionRemote);
-  companionRemote.dispose = () => {
-    origDispose();
-    if (originalTlsCert && originalTlsKey && companionServer) {
-      companionServer.updateTlsCerts(originalTlsCert, originalTlsKey);
-      originalTlsCert = null;
-      originalTlsKey = null;
-      console.log('[Companion] Restored self-signed TLS certs');
-    }
-  };
-
-  // Register companion IPC handlers with lazy server access.
-  // getServer() returns null until TLS cert generation completes.
-  registerCompanionIpc({
-    auth: companionAuth!,
-    getServer: () => companionServer,
-    discovery: companionDiscovery!,
-    remote: companionRemote!,
-  });
-
-  // Initialize prompt library (await so prompts are available before first slash command query)
-  promptLibrary = new PromptLibrary();
-  try {
-    await promptLibrary.init();
-  } catch (err) {
-    console.error('Failed to initialize prompt library:', err);
-  }
-  registerPromptsIpc(promptLibrary);
-  setPromptLibraryRef(promptLibrary);
 
   // Window control IPC handlers
   ipcMain.handle('window:minimize', () => {
@@ -514,35 +299,6 @@ app.whenReady().then(async () => {
     return shell.openExternal(url);
   });
 
-  // Docs IPC — read user documentation markdown files
-  const docsDir = join(app.getAppPath(), 'docs', 'user');
-
-  ipcMain.handle(IPC.DOCS_READ, (_event, page: string) => {
-    try {
-      const safePage = page.replace(/[^a-zA-Z0-9_-]/g, '');
-      const filePath = join(docsDir, `${safePage}.md`);
-      return readFileSync(filePath, 'utf-8');
-    } catch {
-      /* Expected: documentation file may not exist */
-      return null;
-    }
-  });
-
-  ipcMain.handle(IPC.DOCS_LIST, () => {
-    try {
-      return readdirSync(docsDir)
-        .filter(f => f.endsWith('.md'))
-        .map(f => f.replace(/\.md$/, ''));
-    } catch {
-      /* Expected: docs directory may not exist or be unreadable */
-      return [];
-    }
-  });
-
-  // Sync all IPC handlers to the companion bridge registry.
-  // This must happen AFTER all ipcMain.handle() registrations above.
-  syncAllHandlers();
-
   // Terminal menu visibility (driven by developer mode in renderer)
   ipcMain.on(IPC.TERMINAL_SET_MENU_VISIBLE, (event, visible: boolean) => {
     developerModeEnabled = visible;
@@ -553,31 +309,17 @@ app.whenReady().then(async () => {
   // Payload: { resolved: 'dark' | 'light', bgColor?: string, fgColor?: string }
   ipcMain.on(IPC.APP_THEME_CHANGED, (_event, payload: string | { resolved: string; bgColor?: string; fgColor?: string }) => {
     // Support both legacy string payload and new object payload
-    let bg: string;
-    let fg: string;
-    if (typeof payload === 'string') {
-      bg = payload === 'light' ? '#ffffff' : '#1a1b1e';
-      fg = payload === 'light' ? '#1a1b1e' : '#ffffff';
-    } else {
-      bg = payload.bgColor ?? (payload.resolved === 'light' ? '#ffffff' : '#1a1b1e');
-      fg = payload.fgColor ?? (payload.resolved === 'light' ? '#1a1b1e' : '#ffffff');
-    }
-    if (mainWindow) {
-      mainWindow.setBackgroundColor(bg);
-      if (isWin) {
-        mainWindow.setTitleBarOverlay({ color: bg, symbolColor: fg });
-      }
-    }
+    backendRuntime.handleThemeChanged(payload, mainWindow, isWin);
   });
 
   // Set dock icon on macOS (BrowserWindow icon only applies to Windows/Linux)
-  if (isMac && app.dock) {
+  if (!backendOnlyMode && isMac && app.dock) {
     app.dock.setIcon(join(__dirname, '../../resources/icon.png'));
   }
 
   app.on('activate', () => {
     // On macOS it's common to re-create a window when the dock icon is clicked
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!backendOnlyMode && BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
@@ -585,7 +327,7 @@ app.whenReady().then(async () => {
 
 // Quit when all windows are closed, except on macOS
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (!backendOnlyMode && process.platform !== 'darwin') {
     app.quit();
   }
 });
@@ -605,25 +347,14 @@ app.on('before-quit', async (e) => {
   // Without this, stopAll()'s returned Promise is discarded and
   // containers are left running after the app quits.
   try {
-    await desktopService?.stopAll();
-  } catch {
-    // Best effort — don't block quit if Docker is unresponsive
-  }
+    await backendRuntime.beforeQuit();
+  } catch {}
 
   cleanupFinished = true;
   app.quit();
 });
 
 app.on('will-quit', () => {
-  sessionManager?.disposeAll();
-  mcpManager?.disposeAll();
-  ollamaService?.dispose();
-  devService?.dispose();
-  terminalService?.disposeAll();
-  promptLibrary?.dispose();
-  companionServer?.stop();
-  companionDiscovery?.stop();
-  companionRemote?.dispose();
-  companionBridge.shutdown();
+  backendRuntime.dispose();
   shutdownLogger();
 });

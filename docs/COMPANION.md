@@ -623,6 +623,7 @@ The companion server exposes these HTTP endpoints alongside the WebSocket:
 | `GET` | `/` | Serves Pilot React UI (SPA with companion bootstrap) |
 | `GET` | `/api/companion-mode` | Returns `{ companion: true }` — used to detect companion mode |
 | `GET` | `/api/companion-config` | Returns `{ wsPort, wsPath, secure, tokenRequired }` |
+| `GET` | `/api/backend-health` | Returns lightweight backend metadata used by remote clients for reachability + compatibility checks |
 | `POST` | `/api/companion-pair` | Pair a device (see [Authentication](#authentication--pairing)) |
 
 All other routes serve static files from the React bundle with SPA fallback (returns `index.html`).
@@ -631,22 +632,24 @@ All other routes serve static files from the React bundle with SPA fallback (ret
 
 ## Renderer Companion Mode
 
-When the React app is loaded via the companion server (not in Electron), a bootstrap flow runs:
+When the React app is loaded via the companion server (not in Electron), or when Electron is launched against a remote backend, the shared transport bootstrap flow runs:
 
 ### Bootstrap Sequence
 
-1. Companion server injects a `<script>` into `index.html` that writes the WebSocket URL to `sessionStorage`
-2. `main.tsx` calls `initCompanionPolyfill()` before React mounts
-3. `initCompanionPolyfill()` detects companion mode (no `window.api`)
-4. Creates a `WebSocketIPCClient` that polyfills `window.api` with identical method signatures
-5. All React components use `window.api.invoke()` and `window.api.on()` — works identically in both modes
+1. `main.tsx` calls `initCompanionPolyfill()` before React mounts
+2. `initCompanionPolyfill()` detects either browser companion mode (no `window.api`) or remote backend mode (`remoteBackendUrl` / `remoteBackendWsUrl`)
+3. A `WebSocketIPCClient` is created when a stored token is available
+4. Browser companion mode polyfills `window.api`; Electron thin-client mode keeps `window.api` but routes backend calls remotely
+5. Local-only Electron channels still stay local in thin-client mode (dialogs, docs, exports, menu events, app chrome)
 
 ### SessionStorage Keys
 
 | Key | Value | Source |
 |-----|-------|--------|
-| `companion-ws-url` | `wss://192.168.1.42:18088/` | Injected by companion server |
-| `companion-auth-token` | `a1b2c3...` | Set by native app after pairing |
+| `companion-ws-url:{scope}` | `wss://192.168.1.42:18088/` | Saved per backend target |
+| `companion-auth-token:{scope}` | `a1b2c3...` | Saved per backend target after pairing |
+
+Stored auth is scoped by backend target so different Pilot backends do not reuse the same token.
 
 ### window.api Polyfill
 

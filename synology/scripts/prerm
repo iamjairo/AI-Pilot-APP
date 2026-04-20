@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+"${SYNOPKG_PKGDEST}/scripts/start-stop-status" stop || true

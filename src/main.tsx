@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './app';
 import { CompanionPairingScreen } from './components/companion/CompanionPairingScreen';
-import { initCompanionPolyfill, isCompanionMode, isCompanionConnected } from './lib/ipc-client';
+import { getExternalBackendStatus, initCompanionPolyfill, subscribeExternalBackendStatus } from './lib/ipc-client';
 import { initDevCommandListeners } from './stores/dev-command-store';
 import { initTunnelOutputListeners } from './stores/tunnel-output-store';
 import './styles/globals.css';
@@ -27,15 +27,16 @@ initTunnelOutputListeners();
  * In companion mode without token: renders pairing screen only.
  */
 function Root() {
-  const [paired, setPaired] = useState(() => !isCompanionMode() || isCompanionConnected());
+  const [backendStatus, setBackendStatus] = useState(() => getExternalBackendStatus());
 
   const handlePaired = useCallback(() => {
     // Re-run polyfill now that we have a token in localStorage
     initCompanionPolyfill();
-    setPaired(true);
   }, []);
 
-  if (!paired) {
+  useEffect(() => subscribeExternalBackendStatus(setBackendStatus), []);
+
+  if (backendStatus.state === 'unpaired') {
     return <CompanionPairingScreen onPaired={handlePaired} />;
   }
 

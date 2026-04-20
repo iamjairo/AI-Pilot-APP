@@ -4,13 +4,29 @@ import { useEffect, useState } from 'react';
 import { FolderOpen, Brain, Sparkles, ScrollText, Container, Globe } from 'lucide-react';
 import { SettingRow, Toggle } from '../settings-helpers';
 import { IPC } from '../../../../shared/ipc';
-import { invoke } from '../../../lib/ipc-client';
+import { getExternalBackendStatus, invoke, resetExternalBackendSession, subscribeExternalBackendStatus } from '../../../lib/ipc-client';
+import { getRemoteBackendCompatibility } from '../../../lib/remote-backend-compatibility';
+import { fetchRemoteBackendHealth } from '../../../lib/remote-backend-health';
+import type { RemoteBackendHealthResponse } from '../../../../shared/types';
 
 export function GeneralSettings() {
-  const { piAgentDir, load: loadAppSettings, setPiAgentDir, commitMsgModel, commitMsgMaxTokens, update: updateAppSettings, logging, setLogLevel, setFileLogging, setSyslogConfig, desktopEnabled, setDesktopEnabled, webSearchEnabled, webSearchApiKey, setWebSearchEnabled, setWebSearchApiKey } = useAppSettingsStore();
+  const { piAgentDir, remoteBackendUrl, load: loadAppSettings, setPiAgentDir, setRemoteBackendUrl, commitMsgModel, commitMsgMaxTokens, update: updateAppSettings, logging, setLogLevel, setFileLogging, setSyslogConfig, desktopEnabled, setDesktopEnabled, webSearchEnabled, webSearchApiKey, setWebSearchEnabled, setWebSearchApiKey } = useAppSettingsStore();
   const { memoryEnabled, setMemoryEnabled } = useMemoryStore();
   const [dirInput, setDirInput] = useState(piAgentDir);
   const [dirDirty, setDirDirty] = useState(false);
+  const [remoteBackendInput, setRemoteBackendInput] = useState(remoteBackendUrl);
+  const [remoteBackendDirty, setRemoteBackendDirty] = useState(false);
+  const [backendStatus, setBackendStatus] = useState(() => getExternalBackendStatus());
+  const [resettingBackendSession, setResettingBackendSession] = useState(false);
+  const [remoteBackendHealth, setRemoteBackendHealth] = useState<{
+    status: 'idle' | 'checking' | 'reachable' | 'unreachable';
+    message: string | null;
+    details: RemoteBackendHealthResponse | null;
+  }>({
+    status: 'idle',
+    message: null,
+    details: null,
+  });
   const [apiKeyInput, setApiKeyInput] = useState(webSearchApiKey);
   const [availableModels, setAvailableModels] = useState<Array<{ provider: string; id: string; name: string }>>([]);
 
@@ -27,8 +43,15 @@ export function GeneralSettings() {
   }, [piAgentDir]);
 
   useEffect(() => {
+    setRemoteBackendInput(remoteBackendUrl);
+    setRemoteBackendDirty(false);
+  }, [remoteBackendUrl]);
+
+  useEffect(() => {
     setApiKeyInput(webSearchApiKey);
   }, [webSearchApiKey]);
+
+  useEffect(() => subscribeExternalBackendStatus(setBackendStatus), []);
 
   const handleDirChange = (value: string) => {
     setDirInput(value);
@@ -47,6 +70,72 @@ export function GeneralSettings() {
       handleDirSave();
     }
   };
+
+  const handleRemoteBackendSave = () => {
+    setRemoteBackendUrl(remoteBackendInput.trim());
+    setRemoteBackendDirty(false);
+  };
+
+  const handleRemoteBackendKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && remoteBackendDirty) {
+      handleRemoteBackendSave();
+    }
+  };
+
+  const handleResetRemoteBackendSession = async () => {
+    setResettingBackendSession(true);
+    try {
+      resetExternalBackendSession();
+    } finally {
+      setResettingBackendSession(false);
+    }
+  };
+
+  const remoteStatusTone = backendStatus.state === 'connected'
+    ? 'text-success'
+    : (backendStatus.state === 'unpaired' ? 'text-warning' : 'text-text-secondary');
+  const remoteStatusLabel = backendStatus.state === 'connected'
+    ? 'Connected'
+    : (backendStatus.state === 'unpaired'
+      ? 'Pairing required'
+      : (backendStatus.state === 'connecting' ? 'Connecting' : 'Inactive'));
+  const normalizedSavedRemoteBackendUrl = normalizeUrl(remoteBackendUrl);
+  const normalizedActiveRemoteBackendUrl = normalizeUrl(backendStatus.httpUrl);
+  const healthCheckTarget = normalizedActiveRemoteBackendUrl ?? normalizedSavedRemoteBackendUrl;
+  const backendCompatibility = remoteBackendHealth.details
+    ? getRemoteBackendCompatibility(remoteBackendHealth.details)
+    : null;
+
+  useEffect(() => {
+    if (!healthCheckTarget) {
+      setRemoteBackendHealth({ status: 'idle', message: null, details: null });
+      return;
+    }
+
+    const controller = new AbortController();
+    setRemoteBackendHealth({ status: 'checking', message: null, details: null });
+
+    fetchRemoteBackendHealth(healthCheckTarget, (input, init) =>
+      fetch(input, { ...init, signal: controller.signal })
+    )
+      .then((details) => {
+        setRemoteBackendHealth({
+          status: 'reachable',
+          message: `Reachable over ${details.protocol.toUpperCase()}`,
+          details,
+        });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setRemoteBackendHealth({
+          status: 'unreachable',
+          message: error instanceof Error ? error.message : 'Backend health check failed',
+          details: null,
+        });
+      });
+
+    return () => controller.abort();
+  }, [healthCheckTarget]);
 
   return (
     <div className="p-5 space-y-6">
@@ -90,6 +179,93 @@ export function GeneralSettings() {
       >
         <Toggle checked={desktopEnabled} onChange={setDesktopEnabled} />
       </SettingRow>
+
+      <SettingRow
+        icon={<Globe className="w-4 h-4 text-accent" />}
+        label="Remote Backend URL"
+        description="Optional external backend for thin-client mode. Example: https://nas.local:18088. Restart Pilot after changing this."
+      >
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={remoteBackendInput}
+            onChange={(e) => {
+              setRemoteBackendInput(e.target.value);
+              setRemoteBackendDirty(e.target.value !== remoteBackendUrl);
+            }}
+            onKeyDown={handleRemoteBackendKeyDown}
+            className="text-xs bg-bg-surface border border-border rounded px-2 py-1 text-text-primary w-56 focus:outline-none focus:border-accent"
+            placeholder="https://nas.local:18088"
+          />
+          {remoteBackendDirty && (
+            <button
+              onClick={handleRemoteBackendSave}
+              className="text-xs px-2 py-1 bg-accent text-white rounded hover:bg-accent/90 transition-colors"
+            >
+              Save
+            </button>
+          )}
+        </div>
+      </SettingRow>
+
+      {(remoteBackendUrl || backendStatus.enabled) && (
+        <div className="ml-7 rounded-md border border-border bg-bg-surface px-3 py-2 space-y-1">
+          <p className="text-xs text-text-secondary">
+            Status: <span className={remoteStatusTone}>{remoteStatusLabel}</span>
+          </p>
+          {backendStatus.httpUrl && (
+            <p className="text-xs text-text-secondary">
+              Active target: <span className="font-mono text-text-primary">{backendStatus.httpUrl}</span>
+            </p>
+          )}
+          {remoteBackendHealth.status !== 'idle' && (
+            <p className="text-xs text-text-secondary">
+              Reachability:{' '}
+              <span
+                className={
+                  remoteBackendHealth.status === 'reachable'
+                    ? 'text-success'
+                    : (remoteBackendHealth.status === 'unreachable' ? 'text-error' : 'text-text-secondary')
+                }
+              >
+                {remoteBackendHealth.status === 'checking' ? 'Checking…' : remoteBackendHealth.message}
+              </span>
+            </p>
+          )}
+          {backendCompatibility && (
+            <p className="text-xs text-text-secondary">
+              Compatibility:{' '}
+              <span className={backendCompatibility.status === 'compatible' ? 'text-success' : 'text-warning'}>
+                {backendCompatibility.message}
+              </span>
+            </p>
+          )}
+          {remoteBackendUrl && normalizedActiveRemoteBackendUrl !== normalizedSavedRemoteBackendUrl && (
+            <p className="text-xs text-warning">
+              Saved URL will apply after restart unless a CLI flag or environment override is active.
+            </p>
+          )}
+          {backendStatus.state === 'unpaired' && (
+            <p className="text-xs text-warning">
+              Pair this app with the remote backend after restart to finish connecting.
+            </p>
+          )}
+          {backendStatus.hasToken && (
+            <div className="pt-1">
+              <button
+                onClick={handleResetRemoteBackendSession}
+                disabled={resettingBackendSession}
+                className="text-xs px-2.5 py-1 bg-bg-base border border-border text-text-secondary rounded hover:bg-bg-elevated hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {resettingBackendSession ? 'Resetting…' : 'Reset pairing'}
+              </button>
+              <p className="text-[11px] text-text-secondary mt-1">
+                Forget the stored backend token and return to the pairing screen.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Web Search ── */}
       <div className="border-t border-border pt-4 mt-2">
@@ -243,4 +419,13 @@ export function GeneralSettings() {
       </div>
     </div>
   );
+}
+
+function normalizeUrl(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).toString();
+  } catch {
+    return value.trim() || null;
+  }
 }

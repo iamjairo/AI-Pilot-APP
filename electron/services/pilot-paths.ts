@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { homedir } from 'os';
 import { mkdirSync, existsSync, renameSync } from 'fs';
 
@@ -49,7 +49,12 @@ function migrateLegacyDir(): void {
   }
 }
 
-export const PILOT_APP_DIR = resolvePilotAppDir();
+function resolveEnvPilotAppDir(): string | null {
+  const override = process.env.PILOT_APP_DIR?.trim();
+  return override ? resolve(override) : null;
+}
+
+export const PILOT_APP_DIR = resolveEnvPilotAppDir() ?? resolvePilotAppDir();
 
 // App settings file (includes piAgentDir override)
 export const PILOT_APP_SETTINGS_FILE = join(PILOT_APP_DIR, 'app-settings.json');

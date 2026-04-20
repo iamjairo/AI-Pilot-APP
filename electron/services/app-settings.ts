@@ -66,6 +66,26 @@ const DEFAULT_APP_SETTINGS: PilotAppSettings = {
 
 let cachedSettings: PilotAppSettings | null = null;
 
+function parseEnvNumber(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value.trim(), 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseEnvProtocol(value: string | undefined): 'http' | 'https' | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'http' || normalized === 'https' ? normalized : undefined;
+}
+
+function parseEnvBoolean(value: string | undefined): boolean | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return undefined;
+}
+
 export function loadAppSettings(): PilotAppSettings {
   if (cachedSettings) return cachedSettings;
 
@@ -91,6 +111,7 @@ export function loadAppSettings(): PilotAppSettings {
       companionPort: parsed.companionPort ?? undefined,
       companionProtocol: parsed.companionProtocol ?? undefined,
       companionAutoStart: parsed.companionAutoStart ?? false,
+      remoteBackendUrl: typeof parsed.remoteBackendUrl === 'string' ? parsed.remoteBackendUrl : undefined,
       hiddenPaths: Array.isArray(parsed.hiddenPaths) ? parsed.hiddenPaths : DEFAULT_HIDDEN_PATHS,
       desktopEnabled: parsed.desktopEnabled ?? false,
       systemPrompt: parsed.systemPrompt ?? undefined,
@@ -126,6 +147,13 @@ export function saveAppSettings(settings: Partial<PilotAppSettings>): PilotAppSe
   if (typeof settings.companionPort === 'number') validated.companionPort = settings.companionPort;
   if (typeof settings.companionProtocol === 'string') validated.companionProtocol = settings.companionProtocol;
   if (typeof settings.companionAutoStart === 'boolean') validated.companionAutoStart = settings.companionAutoStart;
+  if (typeof settings.remoteBackendUrl === 'string' || settings.remoteBackendUrl === undefined) {
+    if (settings.remoteBackendUrl === undefined || settings.remoteBackendUrl.trim() === '') {
+      validated.remoteBackendUrl = undefined;
+    } else if (/^https?:\/\//.test(settings.remoteBackendUrl.trim())) {
+      validated.remoteBackendUrl = settings.remoteBackendUrl.trim();
+    }
+  }
   if (typeof settings.desktopEnabled === 'boolean') validated.desktopEnabled = settings.desktopEnabled;
   if (typeof settings.theme === 'string' && ['dark', 'light', 'system', 'custom'].includes(settings.theme)) validated.theme = settings.theme;
   if (settings.customThemeSlug === undefined) {
@@ -172,6 +200,19 @@ export function saveAppSettings(settings: Partial<PilotAppSettings>): PilotAppSe
 
 export function getAppSettings(): PilotAppSettings {
   return loadAppSettings();
+}
+
+export function getEffectiveCompanionSettings(): {
+  port: number;
+  protocol: 'http' | 'https';
+  autoStart: boolean;
+} {
+  const settings = loadAppSettings();
+  return {
+    port: parseEnvNumber(process.env.PILOT_COMPANION_PORT) ?? settings.companionPort ?? 18088,
+    protocol: parseEnvProtocol(process.env.PILOT_COMPANION_PROTOCOL) ?? settings.companionProtocol ?? 'https',
+    autoStart: parseEnvBoolean(process.env.PILOT_COMPANION_AUTO_START) ?? settings.companionAutoStart ?? false,
+  };
 }
 
 /** Resolve the effective pi agent directory (from app settings), with ~ expansion */

@@ -14,6 +14,7 @@ interface AppSettingsStore {
   editorCli: string | null;
   onboardingComplete: boolean;
   developerMode: boolean;
+  remoteBackendUrl: string;
   autoStartDevServer: boolean;
   keybindOverrides: Record<string, string | null>;
   hiddenPaths: string[];
@@ -39,6 +40,7 @@ interface AppSettingsStore {
   setTerminalApp: (app: string | null) => Promise<void>;
   setEditorCli: (cli: string | null) => Promise<void>;
   setDeveloperMode: (enabled: boolean) => Promise<void>;
+  setRemoteBackendUrl: (url: string) => Promise<void>;
   setAutoStartDevServer: (enabled: boolean) => Promise<void>;
   setHiddenPaths: (paths: string[]) => Promise<void>;
   setDesktopEnabled: (enabled: boolean) => Promise<void>;
@@ -82,6 +84,7 @@ export const useAppSettingsStore = create<AppSettingsStore>((set, get) => {
     editorCli: null,
     onboardingComplete: false,
     developerMode: false,
+    remoteBackendUrl: '',
     autoStartDevServer: false,
     keybindOverrides: {},
     hiddenPaths: [],
@@ -133,6 +136,7 @@ Guidelines:
         editorCli: settings.editorCli ?? null,
         onboardingComplete: settings.onboardingComplete ?? false,
         developerMode: settings.developerMode ?? false,
+        remoteBackendUrl: settings.remoteBackendUrl ?? '',
         autoStartDevServer: settings.autoStartDevServer ?? false,
         keybindOverrides: settings.keybindOverrides ?? {},
         hiddenPaths: settings.hiddenPaths ?? [],
@@ -170,6 +174,7 @@ Guidelines:
         editorCli: updated.editorCli ?? null,
         onboardingComplete: updated.onboardingComplete ?? false,
         developerMode: updated.developerMode ?? false,
+        remoteBackendUrl: updated.remoteBackendUrl ?? '',
         autoStartDevServer: updated.autoStartDevServer ?? false,
         keybindOverrides: updated.keybindOverrides ?? {},
         hiddenPaths: updated.hiddenPaths ?? [],
@@ -207,6 +212,7 @@ Guidelines:
     setTerminalApp: async (app: string | null) => updateSetting({ terminalApp: app }),
     setEditorCli: async (cli: string | null) => updateSetting({ editorCli: cli }),
     setDeveloperMode: async (enabled: boolean) => updateSetting({ developerMode: enabled }, true),
+    setRemoteBackendUrl: async (url: string) => updateSetting({ remoteBackendUrl: url || undefined }, true),
     setAutoStartDevServer: async (enabled: boolean) => updateSetting({ autoStartDevServer: enabled }, true),
     setHiddenPaths: async (paths: string[]) => updateSetting({ hiddenPaths: paths }, true),
     setDesktopEnabled: async (enabled: boolean) => updateSetting({ desktopEnabled: enabled }, true),

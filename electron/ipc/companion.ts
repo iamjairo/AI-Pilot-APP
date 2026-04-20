@@ -8,7 +8,7 @@ import type { CompanionRemote } from '../services/companion-remote';
 import { setActivationCallback, setTunnelOutputCallback } from '../services/companion-remote';
 import { regenerateTLSCert } from '../services/companion-tls';
 import { PILOT_APP_DIR } from '../services/pilot-paths';
-import { loadAppSettings, saveAppSettings } from '../services/app-settings';
+import { getEffectiveCompanionSettings, loadAppSettings, saveAppSettings } from '../services/app-settings';
 
 interface CompanionDeps {
   auth: CompanionAuth;
@@ -67,16 +67,17 @@ export function registerCompanionIpc(deps: CompanionDeps) {
     const server = deps.getServer();
     const remoteInfo = remote.getInfo();
     const appSettings = loadAppSettings();
+    const effectiveSettings = getEffectiveCompanionSettings();
 
     const allAddresses = getAllLanAddresses();
     const lanAddress = allAddresses.length > 0 ? allAddresses[0].address : null;
 
     return {
       enabled: server?.running ?? false,
-      port: appSettings.companionPort ?? server?.port ?? 18088,
+      port: effectiveSettings.port ?? appSettings.companionPort ?? server?.port ?? 18088,
       // Report the saved setting, not the running server's protocol.
       // This prevents the status poll from reverting a pending protocol change.
-      protocol: appSettings.companionProtocol ?? server?.protocol ?? 'https',
+      protocol: effectiveSettings.protocol ?? appSettings.companionProtocol ?? server?.protocol ?? 'https',
       running: server?.running ?? false,
       connectedClients: server?.connectedClients ?? 0,
       ready: server !== null,
@@ -84,7 +85,7 @@ export function registerCompanionIpc(deps: CompanionDeps) {
       remoteType: remoteInfo.type,
       lanAddress,
       lanAddresses: allAddresses,
-      autoStart: appSettings.companionAutoStart ?? false,
+      autoStart: effectiveSettings.autoStart,
     };
   });
 

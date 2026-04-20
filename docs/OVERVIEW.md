@@ -1,6 +1,6 @@
 # Pilot
 
-> Last updated: 2026-03-10
+> Last updated: 2026-04-20
 
 Pilot is an **Electron 40 + React 19 + TypeScript** desktop application that wraps the `@mariozechner/pi-coding-agent` SDK in a full GUI shell. Users chat with an AI coding agent, review file diffs before they touch disk, manage git (including interactive rebase and AI-assisted conflict resolution), run dev commands, control a Docker-based virtual desktop, connect MCP servers for external tools, and access the session remotely via a companion mobile/web client — all from one keyboard-driven app.
 
@@ -28,7 +28,13 @@ Pilot is an **Electron 40 + React 19 + TypeScript** desktop application that wra
 
 ## Architecture Style
 
-Pilot is a **desktop monolith** that strictly follows Electron's three-process model: a Node.js **main process** that owns all business logic, a thin **preload bridge**, and a **renderer** (React + Zustand) that has zero Node.js access. All cross-process calls use typed IPC channels defined in `shared/ipc.ts`. The app is designed to also run its renderer in a remote browser ("companion mode") via a WebSocket proxy, so the same React UI works on both Electron and mobile.
+Pilot is a **desktop monolith** that strictly follows Electron's three-process model: a Node.js **main process** that owns all business logic, a thin **preload bridge**, and a **renderer** (React + Zustand) that has zero Node.js access. All cross-process calls use typed IPC channels defined in `shared/ipc.ts`. The app now supports three related deployment shapes:
+
+1. **Desktop mode** — the normal Electron app with an embedded backend runtime
+2. **Backend-only mode** — `--backend-only` / `PILOT_BACKEND_ONLY=true`, which starts the backend services without creating a `BrowserWindow`
+3. **Remote thin-client mode** — Electron launches the renderer shell locally but routes backend IPC to a remote Pilot backend over WebSocket
+
+The same renderer also runs in a remote browser ("companion mode") via the companion server, so the React UI works across Electron, browser/mobile companion clients, and Electron thin-client launches.
 
 ## Key Concepts
 
@@ -39,6 +45,7 @@ Pilot is a **desktop monolith** that strictly follows Electron's three-process m
 - **Yolo Mode**: Per-project bypass of the staged-diff review flow. Writes go directly to disk. Opt-in only.
 - **Memory**: A two-tier Markdown system (`<PILOT_DIR>/MEMORY.md` for global, `<project>/.pilot/MEMORY.md` for project) that is injected into every agent system prompt. The agent has tools (`pilot_memory_read`, `pilot_memory_write`, `pilot_memory_search`, `pilot_memory_delete`) to manage memory.
 - **Companion**: An HTTPS + WebSocket server embedded in the app that lets phones or remote browsers mirror the full Pilot UI.
+- **Remote Backend**: A saved or CLI-provided backend URL that makes Electron act as a thin client. Local desktop-only actions stay in Electron; backend IPC is routed to the remote Pilot backend.
 - **Extension / Skill**: SDK-level plugins that add tools or system-prompt fragments to the agent. Managed from `<PILOT_DIR>/extensions/` and `<PILOT_DIR>/skills/`.
 - **Dev Commands**: Project-specific shell commands (npm run dev, etc.) with output streamed to a panel inside Pilot.
 - **Desktop**: A Docker-based virtual display (Xvfb + Fluxbox + noVNC) that the agent can control via `pilot_desktop_*` tools for GUI automation, browser testing, and screenshots.

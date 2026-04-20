@@ -2,6 +2,7 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import { join, extname, resolve, normalize } from 'path';
 import { existsSync } from 'fs';
 import { CompanionAuth } from './companion-server-types';
+import packageJson from '../../package.json';
 
 /**
  * Set up all Express routes for the CompanionServer
@@ -41,6 +42,17 @@ export function setupCompanionRoutes(
       wsPath: '/',
       secure: config.protocol === 'https',
       tokenRequired: true,
+    });
+  });
+
+  app.get('/api/backend-health', (_req: Request, res: Response) => {
+    res.json({
+      ok: true,
+      service: 'pilot-backend',
+      appVersion: packageJson.version,
+      protocol: config.protocol,
+      tokenRequired: true,
+      companion: true,
     });
   });
 

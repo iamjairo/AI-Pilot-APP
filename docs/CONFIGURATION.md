@@ -60,6 +60,7 @@ Managed by `electron/services/app-settings.ts`. Read/written via `APP_SETTINGS_G
 | `companionPort` | `number` | `18088` | TCP port for the companion HTTPS server |
 | `companionProtocol` | `'http' \| 'https'` | `'https'` | Companion server protocol (`https` strongly recommended) |
 | `companionAutoStart` | `boolean` | `false` | Automatically start companion server on app launch |
+| `remoteBackendUrl` | `string` | unset | Optional Pilot backend URL for Electron thin-client mode. CLI flag / env var still override this saved value |
 | `autoStartDevServer` | `boolean` | `false` | Automatically start dev commands marked as `autoStart: true` when opening a project |
 | `hiddenPaths` | `string[]` | Standard ignores | Gitignore-syntax glob patterns to hide from the file tree |
 | `commitMsgMaxTokens` | `number` | `4096` | Max tokens for AI-generated commit message summaries |
@@ -73,6 +74,12 @@ Managed by `electron/services/app-settings.ts`. Read/written via `APP_SETTINGS_G
 | `logging.syslog.port` | `number` | `514` | Syslog UDP port |
 | `logging.syslog.facility` | `number` | `16` | Syslog facility code (16 = local0) |
 | `logging.syslog.appName` | `string` | `'pilot'` | App name in syslog messages |
+
+Remote backend launch precedence is:
+
+1. `--remote-backend-url=...`
+2. `PILOT_REMOTE_BACKEND_URL`
+3. Saved `remoteBackendUrl` in `app-settings.json`
 
 ## Pi Agent Settings (`config.json`)
 

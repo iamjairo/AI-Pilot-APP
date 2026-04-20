@@ -68,6 +68,12 @@ npm run build:win
 
 # Linux — AppImage + .deb + .tar.gz
 npm run build:linux
+
+# Standalone backend bundle for Synology / remote hosting
+npm run build:backend
+
+# Synology DSM package (.spk)
+npm run build:spk
 ```
 
 Output goes to `release/`. Each platform must be built on its native OS (native modules like `node-pty` require it).

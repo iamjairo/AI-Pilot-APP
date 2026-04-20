@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import { IPC } from '../../shared/ipc';
 import type { McpServerConfig, McpServerStatus, McpToolInfo } from '../../shared/types';
+import { invoke } from '../lib/ipc-client';
 
 interface McpState {
   configs: McpServerConfig[];
@@ -30,10 +31,10 @@ export const useMcpStore = create<McpState>((set, get) => ({
   loading: false,
 
   loadServers: async (projectPath) => {
-    set({ loading: true });
+      set({ loading: true });
     try {
       const result: { configs: McpServerConfig[]; statuses: McpServerStatus[] } =
-        await window.api.invoke(IPC.MCP_LIST_SERVERS, projectPath);
+        await invoke(IPC.MCP_LIST_SERVERS, projectPath) as { configs: McpServerConfig[]; statuses: McpServerStatus[] };
       set({ configs: result.configs, statuses: result.statuses, loading: false });
     } catch (error) {
       console.error('Failed to load MCP servers:', error);
@@ -42,38 +43,38 @@ export const useMcpStore = create<McpState>((set, get) => ({
   },
 
   addServer: async (server, scope, projectPath) => {
-    await window.api.invoke(IPC.MCP_ADD_SERVER, server, scope, projectPath);
+    await invoke(IPC.MCP_ADD_SERVER, server, scope, projectPath);
     await get().loadServers(projectPath);
   },
 
   updateServer: async (name, updates, scope, projectPath) => {
-    await window.api.invoke(IPC.MCP_UPDATE_SERVER, name, updates, scope, projectPath);
+    await invoke(IPC.MCP_UPDATE_SERVER, name, updates, scope, projectPath);
     await get().loadServers(projectPath);
   },
 
   removeServer: async (name, scope, projectPath) => {
-    await window.api.invoke(IPC.MCP_REMOVE_SERVER, name, scope, projectPath);
+    await invoke(IPC.MCP_REMOVE_SERVER, name, scope, projectPath);
     await get().loadServers(projectPath);
   },
 
   startServer: async (config) => {
-    await window.api.invoke(IPC.MCP_START_SERVER, config);
+    await invoke(IPC.MCP_START_SERVER, config);
   },
 
   stopServer: async (name) => {
-    await window.api.invoke(IPC.MCP_STOP_SERVER, name);
+    await invoke(IPC.MCP_STOP_SERVER, name);
   },
 
   restartServer: async (name) => {
-    await window.api.invoke(IPC.MCP_RESTART_SERVER, name);
+    await invoke(IPC.MCP_RESTART_SERVER, name);
   },
 
   getTools: async (name) => {
-    return await window.api.invoke(IPC.MCP_GET_TOOLS, name);
+    return await invoke(IPC.MCP_GET_TOOLS, name) as McpToolInfo[];
   },
 
   testServer: async (config) => {
-    return await window.api.invoke(IPC.MCP_TEST_SERVER, config);
+    return await invoke(IPC.MCP_TEST_SERVER, config) as { success: boolean; toolCount: number; error?: string };
   },
 
   handleStatusUpdate: (status) => {

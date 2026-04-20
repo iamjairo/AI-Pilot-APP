@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+find_node_bin() {
+  for candidate in \
+    /var/packages/Node.js_v20/target/usr/local/bin/node \
+    /volume1/@appstore/Node.js_v20/usr/local/bin/node \
+    /usr/local/bin/node \
+    /bin/node
+  do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if ! NODE_BIN="$(find_node_bin)"; then
+  echo "Pilot Backend requires Synology Node.js v20. Install it from Package Center and retry." >&2
+  exit 1
+fi
+
+"$NODE_BIN" -e "const major = Number(process.versions.node.split('.')[0]); if (major < 20) process.exit(1);" || {
+  echo "Pilot Backend requires Node.js 20 or newer." >&2
+  exit 1
+}

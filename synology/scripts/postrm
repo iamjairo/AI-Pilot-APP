@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+rm -f "${SYNOPKG_PKGVAR}/run/pilot-backend.pid"
