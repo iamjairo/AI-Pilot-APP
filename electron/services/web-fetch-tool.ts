@@ -12,8 +12,8 @@ const DEFAULT_TIMEOUT = 30_000;
 function htmlToText(html: string): string {
   let text = html;
   // Remove script and style blocks
-  text = text.replace(/<script[\s\S]*?<\/script>/gi, '');
-  text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
+  text = text.replace(/<script\b[\s\S]*?<\/script(?:\s+[^>]*)?\s*>/gi, '');
+  text = text.replace(/<style\b[\s\S]*?<\/style(?:\s+[^>]*)?\s*>/gi, '');
   // Convert block elements to newlines
   text = text.replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, '\n');
   text = text.replace(/<br\s*\/?>/gi, '\n');
