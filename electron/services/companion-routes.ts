@@ -1,6 +1,6 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import { join, extname, resolve, normalize } from 'path';
+import { join, extname, resolve, normalize, relative } from 'path';
 import { existsSync } from 'fs';
 import rateLimit from 'express-rate-limit';
 import { CompanionAuth } from './companion-server-types';
@@ -79,47 +79,40 @@ export function setupCompanionRoutes(
   app.get('/api/attachments', attachmentsRateLimiter, (req: Request, res: Response) => {
     const filePath = req.query.path as string | undefined;
     if (!filePath) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+    res.status(403).json({ error: 'Forbidden' });
+    return;
     }
 
-    // Canonicalize and normalize the path
-    const normalizedPath = normalize(resolve(filePath));
-
-    // Reject paths containing .. segments after normalization
-    if (normalizedPath.includes('..')) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
-    }
-
-    // Verify path contains /.pilot/attachments/ as a real directory component
-    const attachmentsPattern = /[\/\\]\.pilot[\/\\]attachments[\/\\]/;
-    if (!attachmentsPattern.test(normalizedPath)) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+    // Resolve against a trusted attachments root and enforce containment.
+    const attachmentsRoot = resolve(process.env.HOME || '', '.pilot', 'attachments');
+    const normalizedPath = normalize(resolve(attachmentsRoot, filePath));
+    const rel = relative(attachmentsRoot, normalizedPath);
+    if (rel.startsWith('..') || rel.startsWith('/') || rel.startsWith('\\')) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
     }
 
     // Only allow image extensions
     const ext = extname(normalizedPath).toLowerCase();
     const allowedExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
     if (!allowedExtensions.includes(ext)) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+    res.status(403).json({ error: 'Forbidden' });
+    return;
     }
 
     // Verify file exists
     if (!existsSync(normalizedPath)) {
-      res.status(404).json({ error: 'Not found' });
-      return;
+    res.status(404).json({ error: 'Not found' });
+    return;
     }
 
     // Serve the file with proper content type
     const mimeTypes: Record<string, string> = {
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
     };
     res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
     res.sendFile(normalizedPath);
