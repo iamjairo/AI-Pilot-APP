@@ -92,7 +92,7 @@ export function setupCompanionRoutes(
     }
 
     // Only allow image extensions
-    const ext = extname(normalizedPath).toLowerCase();
+    const ext = extname(canonicalPath).toLowerCase();
     const allowedExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
     if (!allowedExtensions.includes(ext)) {
     res.status(403).json({ error: 'Forbidden' });
@@ -114,7 +114,7 @@ export function setupCompanionRoutes(
       '.webp': 'image/webp',
     };
     res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
-    res.sendFile(normalizedPath);
+    res.sendFile(canonicalPath);
   });
 
   // Serve static files from the React bundle directory

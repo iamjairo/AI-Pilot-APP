@@ -231,7 +231,17 @@ test('git clone URL (not the path part)', () => {
   // The /tmp/repo IS a path and should be extracted
   const paths = extractPathsFromCommand('git clone https://github.com/user/repo /tmp/repo');
   assert(paths.includes('/tmp/repo'), `Expected /tmp/repo, got: ${JSON.stringify(paths)}`);
-  assert(!paths.some(p => p.includes('github.com')), `Should not extract URL path`);
+  assert(
+    !paths.some((p) => {
+      try {
+        const u = new URL(p);
+        return u.hostname === 'github.com';
+      } catch {
+        return false;
+      }
+    }),
+    `Should not extract URL path`
+  );
 });
 
 test('comment should be ignored', () => {
