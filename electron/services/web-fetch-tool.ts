@@ -19,15 +19,15 @@ function htmlToText(html: string): string {
   text = text.replace(/<br\s*\/?>/gi, '\n');
   // Strip remaining tags
   text = text.replace(/<[^>]+>/g, '');
-  // Decode common HTML entities
+  // Decode common HTML entities (`&amp;` must be decoded last to avoid double-unescaping)
   text = text
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&amp;/g, '&');
   // Collapse whitespace
   text = text.replace(/[ \t]+/g, ' ');
   text = text.replace(/\n{3,}/g, '\n\n');
