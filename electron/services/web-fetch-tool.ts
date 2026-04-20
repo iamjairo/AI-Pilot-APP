@@ -26,9 +26,9 @@ function replaceUntilStable(input: string, pattern: RegExp, replacement: string)
  */
 function htmlToText(html: string): string {
   let text = html;
-  // Remove script and style blocks
-  text = replaceUntilStable(text, /<script[\s\S]*?<\/script>/gi, '');
-  text = replaceUntilStable(text, /<style[\s\S]*?<\/style>/gi, '');
+  // Remove script and style blocks (allow forgiving end-tag syntax like </script > or </script foo="bar">)
+  text = replaceUntilStable(text, /<script[\s\S]*?<\/script(?:\s[^>]*)?>/gi, '');
+  text = replaceUntilStable(text, /<style[\s\S]*?<\/style(?:\s[^>]*)?>/gi, '');
   // Convert block elements to newlines
   text = text.replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, '\n');
   text = text.replace(/<br\s*\/?>/gi, '\n');
