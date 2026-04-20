@@ -6,14 +6,29 @@ const MAX_OUTPUT_LINES = 2000;
 const DEFAULT_TIMEOUT = 30_000;
 
 /**
+ * Repeatedly apply a replacement until the text no longer changes.
+ * Prevents incomplete multi-character sanitization where dangerous
+ * patterns can reappear after a single replacement pass.
+ */
+function replaceUntilStable(input: string, pattern: RegExp, replacement: string): string {
+  let previous: string;
+  let current = input;
+  do {
+    previous = current;
+    current = current.replace(pattern, replacement);
+  } while (current !== previous);
+  return current;
+}
+
+/**
  * Strip HTML tags and decode common entities to produce readable text.
  * Removes script/style blocks entirely.
  */
 function htmlToText(html: string): string {
   let text = html;
   // Remove script and style blocks
-  text = text.replace(/<script[\s\S]*?<\/script>/gi, '');
-  text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
+  text = replaceUntilStable(text, /<script[\s\S]*?<\/script>/gi, '');
+  text = replaceUntilStable(text, /<style[\s\S]*?<\/style>/gi, '');
   // Convert block elements to newlines
   text = text.replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, '\n');
   text = text.replace(/<br\s*\/?>/gi, '\n');
