@@ -108,11 +108,11 @@ export function setupCompanionRoutes(
 
     // Serve the file with proper content type
     const mimeTypes: Record<string, string> = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.webp': 'image/webp',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
     };
     res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
     res.sendFile(normalizedPath);
