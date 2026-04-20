@@ -33,7 +33,12 @@ function htmlToText(html: string): string {
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .replace(/&nbsp;/g, ' ')
-      .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+      .replace(/&#(\d+);/g, (match, n) => {
+        const codePoint = Number(n);
+        return Number.isInteger(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+          ? String.fromCodePoint(codePoint)
+          : match;
+      });
   } while (text !== previous);
 
   // Collapse whitespace
