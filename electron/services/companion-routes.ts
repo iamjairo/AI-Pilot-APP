@@ -1,8 +1,7 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import { join, extname, resolve, normalize } from 'path';
-import { existsSync } from 'fs';
-import rateLimit from 'express-rate-limit';
+import { join, extname, resolve, sep } from 'path';
+import { existsSync, realpathSync } from 'fs';
 import { CompanionAuth } from './companion-server-types';
 import packageJson from '../../package.json';
 
@@ -83,24 +82,30 @@ export function setupCompanionRoutes(
       return;
     }
 
-    // Canonicalize and normalize the path
-    const normalizedPath = normalize(resolve(filePath));
-
-    // Reject paths containing .. segments after normalization
-    if (normalizedPath.includes('..')) {
-      res.status(403).json({ error: 'Forbidden' });
+    const attachmentsRoot = resolve(process.env.HOME || process.cwd(), '.pilot', 'attachments');
+    if (!existsSync(attachmentsRoot)) {
+      res.status(404).json({ error: 'Not found' });
       return;
     }
 
-    // Verify path contains /.pilot/attachments/ as a real directory component
-    const attachmentsPattern = /[\/\\]\.pilot[\/\\]attachments[\/\\]/;
-    if (!attachmentsPattern.test(normalizedPath)) {
+    let canonicalRoot: string;
+    let canonicalPath: string;
+    try {
+      canonicalRoot = realpathSync(attachmentsRoot);
+      const resolvedPath = resolve(canonicalRoot, filePath);
+      canonicalPath = realpathSync(resolvedPath);
+    } catch {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+
+    if (!(canonicalPath === canonicalRoot || canonicalPath.startsWith(canonicalRoot + sep))) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
 
     // Only allow image extensions
-    const ext = extname(normalizedPath).toLowerCase();
+    const ext = extname(canonicalPath).toLowerCase();
     const allowedExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
     if (!allowedExtensions.includes(ext)) {
       res.status(403).json({ error: 'Forbidden' });
@@ -108,7 +113,7 @@ export function setupCompanionRoutes(
     }
 
     // Verify file exists
-    if (!existsSync(normalizedPath)) {
+    if (!existsSync(canonicalPath)) {
       res.status(404).json({ error: 'Not found' });
       return;
     }
@@ -122,7 +127,7 @@ export function setupCompanionRoutes(
       '.webp': 'image/webp',
     };
     res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
-    res.sendFile(normalizedPath);
+    res.sendFile(canonicalPath);
   });
 
   // Serve static files from the React bundle directory
