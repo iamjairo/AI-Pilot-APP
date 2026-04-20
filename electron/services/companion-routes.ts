@@ -1,7 +1,7 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
-import { join, extname, resolve, sep } from 'path';
-import { existsSync, realpathSync } from 'fs';
+import { join, extname, resolve, normalize, relative } from 'path';
+import { existsSync } from 'fs';
 import { CompanionAuth } from './companion-server-types';
 import packageJson from '../../package.json';
 
@@ -78,44 +78,31 @@ export function setupCompanionRoutes(
   app.get('/api/attachments', attachmentsRateLimiter, (req: Request, res: Response) => {
     const filePath = req.query.path as string | undefined;
     if (!filePath) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+    res.status(403).json({ error: 'Forbidden' });
+    return;
     }
 
-    const attachmentsRoot = resolve(process.env.HOME || process.cwd(), '.pilot', 'attachments');
-    if (!existsSync(attachmentsRoot)) {
-      res.status(404).json({ error: 'Not found' });
-      return;
-    }
-
-    let canonicalRoot: string;
-    let canonicalPath: string;
-    try {
-      canonicalRoot = realpathSync(attachmentsRoot);
-      const resolvedPath = resolve(canonicalRoot, filePath);
-      canonicalPath = realpathSync(resolvedPath);
-    } catch {
-      res.status(404).json({ error: 'Not found' });
-      return;
-    }
-
-    if (!(canonicalPath === canonicalRoot || canonicalPath.startsWith(canonicalRoot + sep))) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+    // Resolve against a trusted attachments root and enforce containment.
+    const attachmentsRoot = resolve(process.env.HOME || '', '.pilot', 'attachments');
+    const normalizedPath = normalize(resolve(attachmentsRoot, filePath));
+    const rel = relative(attachmentsRoot, normalizedPath);
+    if (rel.startsWith('..') || rel.startsWith('/') || rel.startsWith('\\')) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
     }
 
     // Only allow image extensions
     const ext = extname(canonicalPath).toLowerCase();
     const allowedExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
     if (!allowedExtensions.includes(ext)) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+    res.status(403).json({ error: 'Forbidden' });
+    return;
     }
 
     // Verify file exists
-    if (!existsSync(canonicalPath)) {
-      res.status(404).json({ error: 'Not found' });
-      return;
+    if (!existsSync(normalizedPath)) {
+    res.status(404).json({ error: 'Not found' });
+    return;
     }
 
     // Serve the file with proper content type
