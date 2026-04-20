@@ -21,7 +21,7 @@ function htmlToText(html: string): string {
     text = text.replace(/<script[\s\S]*?<\/script>/gi, '');
     text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
     // Convert block elements to newlines
-    text = text.replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, '\n');
+    text = text.replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n');
     text = text.replace(/<br\s*\/?>/gi, '\n');
     // Strip remaining tags
     text = text.replace(/<[^>]+>/g, '');
