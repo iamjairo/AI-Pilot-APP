@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { getLogger } from './logger';
 import { setupTailscaleProxy, TailscaleResult } from './companion-tailscale';
 import { setupCloudflareTunnel, CloudflareTunnelInfo } from './companion-cloudflare';
+import { setupCaddyProxy, CaddyProxyInfo } from './companion-caddy';
 
 const log = getLogger('CompanionRemote');
 
@@ -16,9 +17,9 @@ export function setActivationCallback(cb: ((url: string) => void) | null): void 
 
 // Callback to stream tunnel process output to the renderer.
 // Set by the IPC layer during setup.
-let _onTunnelOutput: ((provider: 'tailscale' | 'cloudflare', text: string) => void) | null = null;
+let _onTunnelOutput: ((provider: 'tailscale' | 'cloudflare' | 'caddy', text: string) => void) | null = null;
 
-export function setTunnelOutputCallback(cb: ((provider: 'tailscale' | 'cloudflare', text: string) => void) | null): void {
+export function setTunnelOutputCallback(cb: ((provider: 'tailscale' | 'cloudflare' | 'caddy', text: string) => void) | null): void {
   _onTunnelOutput = cb;
 }
 
@@ -33,7 +34,7 @@ interface PortTunnel {
   label: string;
   localUrl: string;
   tunnelUrl: string;
-  tunnelType: 'tailscale' | 'cloudflare';
+  tunnelType: 'tailscale' | 'cloudflare' | 'caddy';
   cfTunnel?: CloudflareTunnelInfo;
 }
 
@@ -42,8 +43,8 @@ export class CompanionRemote {
   private tailscaleDnsName: string | null = null;
   private tailscaleServeProcess: ChildProcess | null = null;
   private cloudflareTunnel: CloudflareTunnelInfo | null = null;
+  private caddyProxy: CaddyProxyInfo | null = null;
   private port: number | null = null;
-  private preferTailscale = true;
 
   /** Active tunnels for dev server ports */
   private portTunnels = new Map<number, PortTunnel>();
@@ -55,11 +56,13 @@ export class CompanionRemote {
    * Set up remote access for the companion server.
    * No automatic fallback — throws on failure so the UI can show the error.
    */
-  async setup(port: number, preferTailscale = true): Promise<string | null> {
+  async setup(port: number, provider: 'tailscale' | 'cloudflare' | 'caddy' | boolean = 'tailscale'): Promise<string | null> {
     this.port = port;
-    this.preferTailscale = preferTailscale;
+    const resolvedProvider = typeof provider === 'boolean'
+      ? (provider ? 'tailscale' : 'cloudflare')
+      : provider;
 
-    if (preferTailscale) {
+    if (resolvedProvider === 'tailscale') {
       const result = await setupTailscaleProxy(port, {
         onActivationUrl: _onActivationUrl || undefined,
         onTunnelOutput: _onTunnelOutput || undefined,
@@ -88,13 +91,21 @@ export class CompanionRemote {
       }
 
       return this.tailscaleUrl;
-    } else {
+    }
+
+    if (resolvedProvider === 'cloudflare') {
       this.cloudflareTunnel = await setupCloudflareTunnel(port, _onTunnelOutput || undefined);
       if (!this.cloudflareTunnel) {
         throw new Error('Cloudflare tunnel failed to start. Is cloudflared installed?');
       }
       return this.cloudflareTunnel.url;
     }
+
+    this.caddyProxy = await setupCaddyProxy(port, _onTunnelOutput || undefined);
+    if (!this.caddyProxy) {
+      throw new Error('Caddy proxy failed to start. Is Caddy installed and available on this host?');
+    }
+    return this.caddyProxy.url;
   }
 
   /**
@@ -140,6 +151,20 @@ export class CompanionRemote {
       return cfTunnel.url;
     }
 
+    if (type === 'caddy') {
+      const tunnelUrl = localUrl;
+      this.portTunnels.set(port, {
+        port,
+        commandId,
+        label,
+        localUrl,
+        tunnelUrl,
+        tunnelType: 'caddy',
+      });
+      console.log(`[CompanionRemote] Caddy local route for ${label}: ${tunnelUrl}`);
+      return tunnelUrl;
+    }
+
     return null;
   }
 
@@ -179,13 +204,14 @@ export class CompanionRemote {
    * Get the current remote URL.
    */
   getUrl(): string | null {
-    return this.cloudflareTunnel?.url || this.tailscaleUrl;
+    return this.caddyProxy?.url || this.cloudflareTunnel?.url || this.tailscaleUrl;
   }
 
   /**
    * Get the type of remote access currently active.
    */
-  getType(): 'tailscale' | 'cloudflare' | null {
+  getType(): 'tailscale' | 'cloudflare' | 'caddy' | null {
+    if (this.caddyProxy) return 'caddy';
     if (this.cloudflareTunnel) return 'cloudflare';
     if (this.tailscaleUrl) return 'tailscale';
     return null;
@@ -212,6 +238,11 @@ export class CompanionRemote {
       this.cloudflareTunnel.dispose();
       this.cloudflareTunnel = null;
     }
+
+    if (this.caddyProxy) {
+      this.caddyProxy.dispose();
+      this.caddyProxy = null;
+    }
     
     // Kill the tailscale funnel process (foreground — no lingering daemon)
     if (this.tailscaleServeProcess) {
@@ -229,11 +260,11 @@ export class CompanionRemote {
    * Get connection info for display.
    */
   getInfo(): {
-    url: string | null;
-    type: 'tailscale' | 'cloudflare' | null;
-    port: number | null;
-    active: boolean;
-  } {
+      url: string | null;
+      type: 'tailscale' | 'cloudflare' | 'caddy' | null;
+      port: number | null;
+      active: boolean;
+    } {
     return {
       url: this.getUrl(),
       type: this.getType(),

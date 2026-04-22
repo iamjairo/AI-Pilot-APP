@@ -11,10 +11,16 @@ function copyWasmPlugin() {
     closeBundle() {
       const wasmSrc = path.resolve(__dirname, 'node_modules/@silvia-odwyer/photon-node/photon_rs_bg.wasm');
       const wasmDest = path.resolve(__dirname, 'out/backend/photon_rs_bg.wasm');
+      const packageJsonSrc = path.resolve(__dirname, 'package.json');
+      const packageJsonDest = path.resolve(__dirname, 'out/backend/package.json');
       try {
         if (fs.existsSync(wasmSrc)) {
           fs.mkdirSync(path.dirname(wasmDest), { recursive: true });
           fs.copyFileSync(wasmSrc, wasmDest);
+        }
+        if (fs.existsSync(packageJsonSrc)) {
+          fs.mkdirSync(path.dirname(packageJsonDest), { recursive: true });
+          fs.copyFileSync(packageJsonSrc, packageJsonDest);
         }
       } catch (err) {
         console.warn('[copy-backend-wasm] Failed to copy WASM:', err.message);
@@ -30,11 +36,10 @@ export default defineConfig({
     },
   },
   ssr: {
-    noExternal: [
-      '@mariozechner/pi-coding-agent',
-      '@mariozechner/pi-agent-core',
-      '@mariozechner/pi-ai',
-      '@mariozechner/jiti',
+    noExternal: true,
+    external: [
+      '@silvia-odwyer/photon-node',
+      'sharp',
     ],
   },
   build: {

@@ -24,7 +24,7 @@ export interface TailscaleResult {
 
 interface TailscaleCallbacks {
   onActivationUrl?: (url: string) => void;
-  onTunnelOutput?: (provider: 'tailscale' | 'cloudflare', text: string) => void;
+  onTunnelOutput?: (provider: 'tailscale' | 'cloudflare' | 'caddy', text: string) => void;
 }
 
 /**

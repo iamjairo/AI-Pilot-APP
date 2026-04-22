@@ -4,7 +4,11 @@ import { initLogger, getLogger, shutdownLogger } from '../services/logger';
 import { loadAppSettings } from '../services/app-settings';
 import { IPC } from '../../shared/ipc';
 import { BackendRuntime } from '../services/backend-runtime';
+import { registerSettingsIpc } from '../ipc/settings';
+import { registerShellIpc } from '../ipc/shell';
+import { registerThemeIpc } from '../ipc/theme';
 import { isBackendOnlyMode, resolveRemoteBackendUrl } from '../utils/runtime-mode';
+import { shouldTrustRemoteBackendCertificate } from '../utils/remote-backend-cert';
 
 let mainWindow: BrowserWindow | null = null;
 const backendRuntime = new BackendRuntime();
@@ -215,6 +219,22 @@ function createWindow() {
   buildApplicationMenu();
 }
 
+function configureRemoteBackendCertificateTrust(remoteUrl: string | null): void {
+  if (!remoteUrl) {
+    return;
+  }
+
+  app.on('certificate-error', (event, _webContents, url, _error, _certificate, callback) => {
+    if (shouldTrustRemoteBackendCertificate(url, remoteUrl)) {
+      event.preventDefault();
+      callback(true);
+      return;
+    }
+
+    callback(false);
+  });
+}
+
 // Enable native Wayland support on Linux when available
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('ozone-platform-hint', 'auto');
@@ -239,6 +259,10 @@ app.whenReady().then(async () => {
     mode: backendOnlyMode ? 'backend-only' : remoteClientMode ? 'remote-client' : 'desktop',
     remoteBackendUrl,
   });
+
+  if (remoteClientMode) {
+    configureRemoteBackendCertificateTrust(remoteBackendUrl);
+  }
 
   // Handle pilot-attachment:// URLs → read local files
   protocol.handle('pilot-attachment', (request) => {
@@ -275,6 +299,10 @@ app.whenReady().then(async () => {
       docsDir: join(app.getAppPath(), 'docs', 'user'),
       backendOnly: backendOnlyMode,
     });
+  } else {
+    registerSettingsIpc();
+    registerShellIpc();
+    registerThemeIpc(backendRuntime.themeService);
   }
 
   // Window control IPC handlers

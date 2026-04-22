@@ -5,7 +5,7 @@ export interface CompanionStatus {
   running: boolean;
   connectedClients: number;
   remoteUrl: string | null;
-  remoteType: 'tailscale' | 'cloudflare' | null;
+  remoteType: 'tailscale' | 'cloudflare' | 'caddy' | null;
   lanAddress: string | null;
   lanAddresses: Array<{ address: string; name: string }>;
   autoStart: boolean;
@@ -21,4 +21,5 @@ export interface RemoteAvailability {
   tailscale: boolean;
   tailscaleOnline: boolean;
   cloudflared: boolean;
+  caddy: boolean;
 }

@@ -18,9 +18,15 @@ describe('shouldUseLocalElectronTransport', () => {
     expect(shouldUseLocalElectronTransport(IPC.MCP_LIST_SERVERS, 'invoke')).toBe(false);
   });
 
-  it('routes native shell and export invokes locally', () => {
+  it('routes native shell, theme, and export invokes locally', () => {
+    expect(shouldUseLocalElectronTransport(IPC.APP_SETTINGS_GET, 'invoke')).toBe(true);
+    expect(shouldUseLocalElectronTransport(IPC.APP_SETTINGS_UPDATE, 'invoke')).toBe(true);
+    expect(shouldUseLocalElectronTransport(IPC.APP_RELAUNCH, 'invoke')).toBe(true);
     expect(shouldUseLocalElectronTransport(IPC.SHELL_CONFIRM_DIALOG, 'invoke')).toBe(true);
     expect(shouldUseLocalElectronTransport(IPC.SHELL_DETECT_EDITORS, 'invoke')).toBe(true);
+    expect(shouldUseLocalElectronTransport(IPC.THEME_LIST, 'invoke')).toBe(true);
+    expect(shouldUseLocalElectronTransport(IPC.THEME_IMPORT, 'invoke')).toBe(true);
+    expect(shouldUseLocalElectronTransport(IPC.THEME_EXPORT, 'invoke')).toBe(true);
     expect(shouldUseLocalElectronTransport(IPC.PROJECT_OPEN_DIALOG, 'invoke')).toBe(true);
     expect(shouldUseLocalElectronTransport(IPC.DOCS_READ, 'invoke')).toBe(true);
     expect(shouldUseLocalElectronTransport(IPC.SESSION_EXPORT, 'invoke')).toBe(true);

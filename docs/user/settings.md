@@ -286,6 +286,7 @@ Access Pilot from outside your local network:
 
 - **Tailscale**: If installed, exposes Pilot on your tailnet with proper TLS certificates
 - **Cloudflare Tunnel**: Creates a quick `*.trycloudflare.com` tunnel (no account needed)
+- **Caddy**: Runs a local-first reverse proxy on the host, useful for LAN access or later domain-based publishing
 
 **See also**: [Companion Access](./companion.md) for the full guide.
 

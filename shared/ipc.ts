@@ -45,6 +45,7 @@ export const IPC = {
   // App Settings (Pilot-level, stored in ~/.config/pilot/)
   APP_SETTINGS_GET: 'app-settings:get',
   APP_SETTINGS_UPDATE: 'app-settings:update',
+  APP_RELAUNCH: 'app:relaunch',
   APP_THEME_CHANGED: 'app-settings:theme-changed',
 
   // Custom Themes

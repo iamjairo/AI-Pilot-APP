@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import { getExternalBackendStatus, getRemoteBackendHttpUrl, isCompanionMode, storeExternalBackendAuthToken } from '../../lib/ipc-client';
+import { IPC } from '../../../shared/ipc';
+import { getExternalBackendStatus, getRemoteBackendHttpUrl, invoke, isCompanionMode, resetExternalBackendSession, setExternalBackendTarget, storeExternalBackendAuthToken } from '../../lib/ipc-client';
 import { getRemoteBackendCompatibility } from '../../lib/remote-backend-compatibility';
 import { fetchRemoteBackendHealth } from '../../lib/remote-backend-health';
 import type { RemoteBackendHealthResponse } from '../../../shared/types';
@@ -25,6 +26,9 @@ export function CompanionPairingScreen({ onPaired }: CompanionPairingScreenProps
   const [deviceName, setDeviceName] = useState(() => getDefaultDeviceName());
   const [error, setError] = useState<string | null>(null);
   const [pairing, setPairing] = useState(false);
+  const [backendUrlInput, setBackendUrlInput] = useState(() => backendStatus.httpUrl ?? '');
+  const [savingBackendUrl, setSavingBackendUrl] = useState(false);
+  const [resettingBackendUrl, setResettingBackendUrl] = useState(false);
   const [healthCheckNonce, setHealthCheckNonce] = useState(0);
   const [backendReachability, setBackendReachability] = useState<{
     status: 'checking' | 'reachable' | 'unreachable';
@@ -39,6 +43,10 @@ export function CompanionPairingScreen({ onPaired }: CompanionPairingScreenProps
   const backendCompatibility = backendReachability.details
     ? getRemoteBackendCompatibility(backendReachability.details)
     : null;
+
+  useEffect(() => {
+    setBackendUrlInput(backendStatus.httpUrl ?? '');
+  }, [backendStatus.httpUrl]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -114,6 +122,40 @@ export function CompanionPairingScreen({ onPaired }: CompanionPairingScreenProps
     }
   }, [backendBaseUrl, backendCompatibility, backendLabel, backendReachability.status, pin, deviceName, onPaired]);
 
+  const handleSaveBackendUrl = useCallback(async () => {
+    const normalized = normalizeBackendUrlInput(backendUrlInput);
+    if (!normalized) {
+      setError('Enter a valid http:// or https:// backend URL');
+      return;
+    }
+
+    setSavingBackendUrl(true);
+    setError(null);
+    try {
+      await invoke(IPC.APP_SETTINGS_UPDATE, { remoteBackendUrl: normalized });
+      resetExternalBackendSession();
+      setExternalBackendTarget(normalized);
+      setHealthCheckNonce((value) => value + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save backend URL');
+    } finally {
+      setSavingBackendUrl(false);
+    }
+  }, [backendUrlInput]);
+
+  const handleResetBackendUrl = useCallback(async () => {
+    setResettingBackendUrl(true);
+    setError(null);
+    try {
+      await invoke(IPC.APP_SETTINGS_UPDATE, { remoteBackendUrl: undefined });
+      resetExternalBackendSession();
+      await invoke(IPC.APP_RELAUNCH);
+    } catch (err) {
+      setResettingBackendUrl(false);
+      setError(err instanceof Error ? err.message : 'Failed to relaunch Pilot');
+    }
+  }, []);
+
   const handlePinChange = (value: string) => {
     // Only allow digits, max 6
     const digits = value.replace(/\D/g, '').slice(0, 6);
@@ -182,6 +224,44 @@ export function CompanionPairingScreen({ onPaired }: CompanionPairingScreenProps
               Retry connection check
             </button>
           )}
+          {!browserCompanion && (
+            <div className="pt-2 space-y-2 border-t border-border">
+              <label className="block text-xs text-text-secondary">
+                Remote backend URL
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={backendUrlInput}
+                  onChange={(e) => {
+                    setBackendUrlInput(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder="https://nas.local:18088"
+                  className="flex-1 px-2.5 py-1.5 rounded-md bg-bg-base border border-border text-text-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                />
+                <button
+                  onClick={handleSaveBackendUrl}
+                  disabled={savingBackendUrl}
+                  className="text-xs px-2.5 py-1.5 bg-accent text-white rounded hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingBackendUrl ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] text-text-secondary">
+                  Save a different backend target and retry pairing without leaving this screen.
+                </p>
+                <button
+                  onClick={handleResetBackendUrl}
+                  disabled={resettingBackendUrl}
+                  className="text-[11px] px-2 py-1 bg-bg-base border border-border text-text-secondary rounded hover:bg-bg-elevated hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {resettingBackendUrl ? 'Relaunching…' : 'Reset to local app'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* PIN Entry */}
@@ -249,6 +329,21 @@ export function CompanionPairingScreen({ onPaired }: CompanionPairingScreenProps
       </div>
     </div>
   );
+}
+
+function normalizeBackendUrlInput(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
 }
 
 function getDefaultDeviceName(): string {

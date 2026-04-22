@@ -102,4 +102,18 @@ describe('ipc-client external backend controls', () => {
     expect(localStorage.getItem('companion-auth-token:https%3A%2F%2Fnas-a.local%3A18088')).toBe('token-a');
     expect(localStorage.getItem('companion-auth-token:https%3A%2F%2Fnas-b.local%3A18088')).toBeNull();
   });
+
+  it('updates the active backend target in place', async () => {
+    const ipcClient = await import('../../../src/lib/ipc-client');
+
+    window.history.replaceState({}, '', 'http://localhost/?remoteBackendUrl=https://nas-a.local:18088');
+    ipcClient.initCompanionPolyfill();
+    expect(ipcClient.getRemoteBackendHttpUrl()).toBe('https://nas-a.local:18088/');
+
+    ipcClient.setExternalBackendTarget('https://nas-b.local:18088');
+
+    expect(window.location.search).toContain('remoteBackendUrl=https%3A%2F%2Fnas-b.local%3A18088');
+    expect(ipcClient.getRemoteBackendHttpUrl()).toBe('https://nas-b.local:18088/');
+    expect(ipcClient.getExternalBackendStatus().state).toBe('unpaired');
+  });
 });

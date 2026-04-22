@@ -16,7 +16,7 @@ export interface CloudflareTunnelInfo {
  */
 export async function setupCloudflareTunnel(
   port: number,
-  onTunnelOutput?: (provider: 'tailscale' | 'cloudflare', text: string) => void
+  onTunnelOutput?: (provider: 'tailscale' | 'cloudflare' | 'caddy', text: string) => void
 ): Promise<CloudflareTunnelInfo | null> {
   try {
     // Check if cloudflared is installed

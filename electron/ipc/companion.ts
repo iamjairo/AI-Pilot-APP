@@ -1,11 +1,13 @@
 import { ipcMain, BrowserWindow, shell } from 'electron';
 import { execSync } from 'child_process';
+import QRCode from 'qrcode';
 import { IPC } from '../../shared/ipc';
 import type { CompanionAuth } from '../services/companion-auth';
 import type { CompanionServer } from '../services/companion-server';
 import { CompanionDiscovery } from '../services/companion-discovery';
 import type { CompanionRemote } from '../services/companion-remote';
 import { setActivationCallback, setTunnelOutputCallback } from '../services/companion-remote';
+import { findCaddyBinary } from '../services/companion-caddy';
 import { regenerateTLSCert } from '../services/companion-tls';
 import { PILOT_APP_DIR } from '../services/pilot-paths';
 import { getEffectiveCompanionSettings, loadAppSettings, saveAppSettings } from '../services/app-settings';
@@ -168,7 +170,6 @@ export function registerCompanionIpc(deps: CompanionDeps) {
     // Generate QR code as data URL
     let dataUrl: string | null = null;
     try {
-      const QRCode = require('qrcode');
       dataUrl = await QRCode.toDataURL(JSON.stringify(qrPayload), {
         width: 256,
         margin: 2,
@@ -217,7 +218,7 @@ export function registerCompanionIpc(deps: CompanionDeps) {
   /**
    * Enable remote access tunnel (Tailscale or Cloudflare)
    */
-  ipcMain.handle(IPC.COMPANION_ENABLE_REMOTE, async (_event, preferTailscale = true) => {
+  ipcMain.handle(IPC.COMPANION_ENABLE_REMOTE, async (_event, provider: 'tailscale' | 'cloudflare' | 'caddy' | boolean = 'tailscale') => {
     const server = requireServer(deps);
     if (!server.running) {
       throw new Error('Companion server must be running to enable remote access');
@@ -232,9 +233,9 @@ export function registerCompanionIpc(deps: CompanionDeps) {
     });
 
     try {
-      const remoteUrl = await remote.setup(server.port, preferTailscale);
+      const remoteUrl = await remote.setup(server.port, provider);
       if (!remoteUrl) {
-        throw new Error('Failed to set up remote access. Ensure Tailscale or Cloudflare is installed.');
+        throw new Error('Failed to set up remote access. Ensure the selected provider is installed and configured.');
       }
 
       const remoteInfo = remote.getInfo();
@@ -293,6 +294,7 @@ export function registerCompanionIpc(deps: CompanionDeps) {
     let tailscale = false;
     let tailscaleOnline = false;
     let cloudflared = false;
+    const caddy = Boolean(findCaddyBinary());
     try { execSync(`${whichCmd} tailscale`, { stdio: 'ignore' }); tailscale = true; } catch { /* Expected: tool not installed */ }
     try { execSync(`${whichCmd} cloudflared`, { stdio: 'ignore' }); cloudflared = true; } catch { /* Expected: tool not installed */ }
     if (tailscale) {
@@ -302,7 +304,7 @@ export function registerCompanionIpc(deps: CompanionDeps) {
         tailscaleOnline = !!status.Self?.Online;
       } catch { /* Expected: tailscale not running or not authenticated */ }
     }
-    return { tailscale, tailscaleOnline, cloudflared };
+    return { tailscale, tailscaleOnline, cloudflared, caddy };
   });
 
   /**

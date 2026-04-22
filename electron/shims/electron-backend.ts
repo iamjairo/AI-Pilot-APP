@@ -128,6 +128,9 @@ export const app = {
   on(_event: string, _listener: (...args: any[]) => void) {
     return app;
   },
+  relaunch(): void {
+    noop();
+  },
   quit(): void {
     noop();
   },

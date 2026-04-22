@@ -18,6 +18,10 @@ export interface CompanionIPCBridge {
  * The actual implementation will be in companion-auth.ts
  */
 export interface CompanionAuth {
+  pair(credential: string, deviceName: string): Promise<string | null>;
+  generatePIN(): string;
+  getActivePairing(): { pin: string; createdAt: number; expiresAt: number } | null;
+  getDevices(): Array<{ sessionId: string; deviceName: string; lastSeen: number }>;
   validateToken(token: string): Promise<{ sessionId: string; deviceName: string } | null>;
 }
 

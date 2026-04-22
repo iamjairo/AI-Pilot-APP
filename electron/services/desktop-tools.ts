@@ -11,7 +11,6 @@
 import { Type } from '@sinclair/typebox';
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent';
 import type { DesktopService } from './desktop-service';
-import { overlayGrid } from '../utils/image-grid';
 
 /** Maximum wait time for desktop_wait tool (seconds) */
 const MAX_WAIT_SECONDS = 30;
@@ -199,6 +198,7 @@ export function createDesktopTools(
 
         // Always overlay coordinate grid for agent click precision
         const gridSize = params.gridSize ?? 100;
+        const { overlayGrid } = await import('../utils/image-grid');
         base64 = await overlayGrid(base64, { gridSize });
 
         return {

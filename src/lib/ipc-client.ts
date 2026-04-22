@@ -69,6 +69,22 @@ export function resetExternalBackendSession(): void {
   notifyExternalBackendStatus();
 }
 
+export function setExternalBackendTarget(remoteBackendUrl: string | null): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const nextUrl = new URL(window.location.href);
+  if (remoteBackendUrl) {
+    nextUrl.searchParams.set('remoteBackendUrl', remoteBackendUrl);
+  } else {
+    nextUrl.searchParams.delete('remoteBackendUrl');
+  }
+  nextUrl.searchParams.delete('remoteBackendWsUrl');
+  window.history.replaceState({}, '', nextUrl);
+  initCompanionPolyfill();
+}
+
 export function storeExternalBackendAuthToken(token: string): void {
   setStoredExternalBackendValue(AUTH_TOKEN_STORAGE_KEY, token);
   notifyExternalBackendStatus();

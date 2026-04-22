@@ -1,34 +1,37 @@
 /**
- * @file Tunnel output store — manages Tailscale and Cloudflare tunnel output streams.
+ * @file Tunnel output store — manages remote provider output streams.
  */
 import { create } from 'zustand';
 import { IPC } from '../../shared/ipc';
 import { on } from '../lib/ipc-client';
 
-/** Tunnel provider type (Tailscale or Cloudflare). */
-export type TunnelProvider = 'tailscale' | 'cloudflare';
+/** Tunnel provider type. */
+export type TunnelProvider = 'tailscale' | 'cloudflare' | 'caddy';
 
 /** Virtual command IDs used in the output window system. */
 export const TUNNEL_IDS = {
   tailscale: '__tunnel:tailscale__',
   cloudflare: '__tunnel:cloudflare__',
+  caddy: '__tunnel:caddy__',
 } as const;
 
 /** Labels for display in output window tabs. */
 export const TUNNEL_LABELS: Record<string, string> = {
   [TUNNEL_IDS.tailscale]: 'Tailscale Funnel',
   [TUNNEL_IDS.cloudflare]: 'Cloudflare Tunnel',
+  [TUNNEL_IDS.caddy]: 'Caddy Reverse Proxy',
 };
 
 /** Check if a command ID is a tunnel output tab. */
 export function isTunnelId(id: string): boolean {
-  return id === TUNNEL_IDS.tailscale || id === TUNNEL_IDS.cloudflare;
+  return id === TUNNEL_IDS.tailscale || id === TUNNEL_IDS.cloudflare || id === TUNNEL_IDS.caddy;
 }
 
 /** Get the provider from a tunnel ID. */
 export function tunnelIdToProvider(id: string): TunnelProvider | null {
   if (id === TUNNEL_IDS.tailscale) return 'tailscale';
   if (id === TUNNEL_IDS.cloudflare) return 'cloudflare';
+  if (id === TUNNEL_IDS.caddy) return 'caddy';
   return null;
 }
 
@@ -45,6 +48,7 @@ export const useTunnelOutputStore = create<TunnelOutputStore>((set) => ({
   output: {
     tailscale: '',
     cloudflare: '',
+    caddy: '',
   },
 
   appendOutput: (provider: TunnelProvider, text: string) => {

@@ -545,7 +545,7 @@ These channels are blocked for companion clients (desktop-only):
 | `companion:pair` | `(credential: string, deviceName: string)` | `{ token: string }` | Pair a device |
 | `companion:get-devices` | `()` | `DeviceInfo[]` | List paired devices |
 | `companion:revoke-device` | `(sessionId: string)` | `{ success: boolean }` | Revoke device access |
-| `companion:enable-remote` | `(preferTailscale?: boolean)` | `{ url, type, active }` | Enable remote tunnel |
+| `companion:enable-remote` | `(provider?: 'tailscale' \| 'cloudflare' \| 'caddy')` | `{ url, type, active }` | Enable remote access provider |
 | `companion:disable-remote` | `()` | `{ active: boolean }` | Disable remote tunnel |
 
 ### Workspace
@@ -730,7 +730,7 @@ If the user has Tailscale installed, the companion server can be accessed via th
 https://<device-name>.<tailnet>.ts.net:18088/
 ```
 
-Enable via: `companion:enable-remote` with `preferTailscale: true`
+Enable via: `companion:enable-remote` with `'tailscale'`
 
 ### Cloudflare Tunnel
 
@@ -740,7 +740,24 @@ Uses `cloudflared` to create a quick tunnel (no account needed):
 https://<random-name>.trycloudflare.com/
 ```
 
-Enable via: `companion:enable-remote` with `preferTailscale: false`
+Enable via: `companion:enable-remote` with `'cloudflare'`
+
+### Caddy
+
+Uses a managed local Caddy instance as a reverse proxy in front of the companion server.
+
+Default behavior:
+
+```text
+http://<lan-ip>:20181/
+```
+
+- Pilot writes a managed Caddyfile under `<PILOT_DIR>/caddy/Caddyfile`
+- Default site address is `:20181`
+- Override with `PILOT_CADDY_SITE_ADDRESS`
+- If you provide a real hostname, Caddy can terminate HTTPS for that hostname
+
+Enable via: `companion:enable-remote` with `'caddy'`
 
 ---
 

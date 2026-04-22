@@ -4,6 +4,314 @@ import { existsSync } from 'fs';
 import { CompanionAuth } from './companion-server-types';
 import packageJson from '../../package.json';
 
+function getAdminStatus(config: {
+  port: number;
+  protocol: 'http' | 'https';
+  auth: CompanionAuth;
+}) {
+  const activePairing = config.auth.getActivePairing();
+  const now = Date.now();
+  return {
+    ok: true,
+    service: 'pilot-backend',
+    appVersion: packageJson.version,
+    protocol: config.protocol,
+    port: config.port,
+    pairedDeviceCount: config.auth.getDevices().length,
+    activePairing: activePairing
+      ? {
+          pin: activePairing.pin,
+          expiresAt: activePairing.expiresAt,
+          secondsRemaining: Math.max(0, Math.ceil((activePairing.expiresAt - now) / 1000)),
+        }
+      : null,
+  };
+}
+
+function renderSynologyAdminPage(config: {
+  port: number;
+  protocol: 'http' | 'https';
+}): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pilot Backend Admin</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #1d1e22;
+        --panel: #2b2d33;
+        --panel-border: #3b3e46;
+        --text: #f1f1f3;
+        --muted: #b3b6bf;
+        --accent: #55c2ff;
+        --accent-hover: #72ccff;
+        --success: #67d17a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 48px 20px 64px;
+      }
+      .hero {
+        text-align: center;
+        margin-bottom: 28px;
+      }
+      .hero .emoji {
+        font-size: 40px;
+        margin-bottom: 12px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 44px;
+        line-height: 1.1;
+      }
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        font-size: 18px;
+      }
+      .grid {
+        display: grid;
+        gap: 18px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--panel-border);
+        border-radius: 20px;
+        padding: 22px;
+      }
+      .card h2 {
+        margin: 0 0 14px;
+        font-size: 22px;
+      }
+      .meta {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 10px 14px;
+        margin: 0;
+      }
+      .meta dt {
+        color: var(--muted);
+      }
+      .meta dd {
+        margin: 0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        word-break: break-word;
+      }
+      .pin-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .pin-box {
+        min-width: 200px;
+        padding: 14px 18px;
+        border-radius: 16px;
+        background: #17181c;
+        border: 1px solid var(--panel-border);
+        font-size: 34px;
+        letter-spacing: 0.35em;
+        text-align: center;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      }
+      button, a.button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 0 16px;
+        border-radius: 12px;
+        border: 0;
+        background: var(--accent);
+        color: #082334;
+        font-weight: 700;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      button:hover, a.button:hover {
+        background: var(--accent-hover);
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .success {
+        color: var(--success);
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      .help {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+      .hidden {
+        display: none;
+      }
+      @media (max-width: 700px) {
+        h1 { font-size: 34px; }
+        .meta { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="hero">
+        <div class="emoji">🧑‍✈️</div>
+        <h1>Pilot Backend Admin</h1>
+        <p class="subtitle">Use this Synology page to generate a pairing PIN for Pilot Desktop.</p>
+      </header>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Backend status</h2>
+          <dl class="meta">
+            <dt>Service</dt>
+            <dd class="success">Running</dd>
+            <dt>Version</dt>
+            <dd id="version">-</dd>
+            <dt>Protocol</dt>
+            <dd id="protocol">-</dd>
+            <dt>Port</dt>
+            <dd id="port">-</dd>
+            <dt>Paired devices</dt>
+            <dd id="devices">-</dd>
+            <dt>Desktop backend URL</dt>
+            <dd id="backend-url">-</dd>
+          </dl>
+        </article>
+
+        <article class="card">
+          <h2>Generate pairing PIN</h2>
+          <div class="pin-row">
+            <div class="pin-box" id="pin">------</div>
+            <button id="generate-pin">Generate PIN</button>
+          </div>
+          <p class="help" style="margin-top: 12px;">
+            Enter this PIN in the Pilot Desktop pairing screen. The PIN is valid for 30 seconds.
+          </p>
+          <p class="help" id="pin-status" style="margin-top: 8px;">No active PIN.</p>
+        </article>
+
+        <article class="card">
+          <h2>How to pair</h2>
+          <p class="help">
+            1. Open Pilot Desktop on your Mac.<br />
+            2. Set the remote backend URL to the value shown above.<br />
+            3. Click <strong>Generate PIN</strong> here.<br />
+            4. Enter the PIN in Pilot Desktop before it expires.
+          </p>
+          <div class="actions">
+            <a class="button" href="/" target="_blank" rel="noreferrer">Open companion web UI</a>
+            <a class="button" href="/api/backend-health" target="_blank" rel="noreferrer">Open health endpoint</a>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const pinEl = document.getElementById('pin');
+      const pinStatusEl = document.getElementById('pin-status');
+      const versionEl = document.getElementById('version');
+      const protocolEl = document.getElementById('protocol');
+      const portEl = document.getElementById('port');
+      const devicesEl = document.getElementById('devices');
+      const backendUrlEl = document.getElementById('backend-url');
+      const generateBtn = document.getElementById('generate-pin');
+
+      let currentExpiry = null;
+
+      function renderStatus(status) {
+        versionEl.textContent = status.appVersion;
+        protocolEl.textContent = status.protocol.toUpperCase();
+        portEl.textContent = String(status.port);
+        devicesEl.textContent = String(status.pairedDeviceCount);
+        backendUrlEl.textContent = status.protocol + '://' + window.location.hostname + ':' + status.port;
+
+        if (status.activePairing) {
+          pinEl.textContent = status.activePairing.pin.split('').join(' ');
+          currentExpiry = status.activePairing.expiresAt;
+          updateCountdown();
+        } else {
+          pinEl.textContent = '------';
+          currentExpiry = null;
+          pinStatusEl.textContent = 'No active PIN.';
+        }
+      }
+
+      function updateCountdown() {
+        if (!currentExpiry) {
+          pinStatusEl.textContent = 'No active PIN.';
+          return;
+        }
+
+        const secondsRemaining = Math.max(0, Math.ceil((currentExpiry - Date.now()) / 1000));
+        if (secondsRemaining === 0) {
+          currentExpiry = null;
+          pinEl.textContent = '------';
+          pinStatusEl.textContent = 'PIN expired. Generate a new one.';
+          return;
+        }
+
+        pinStatusEl.textContent = 'PIN expires in ' + secondsRemaining + ' second' + (secondsRemaining === 1 ? '' : 's') + '.';
+      }
+
+      async function fetchStatus() {
+        const response = await fetch('/api/backend-admin/status', {
+          headers: { Accept: 'application/json' },
+        });
+        if (!response.ok) {
+          throw new Error('Failed to load backend status');
+        }
+        const status = await response.json();
+        renderStatus(status);
+      }
+
+      async function generatePin() {
+        generateBtn.disabled = true;
+        generateBtn.textContent = 'Generating…';
+        try {
+          const response = await fetch('/api/backend-admin/generate-pin', {
+            method: 'POST',
+            headers: { Accept: 'application/json' },
+          });
+          if (!response.ok) {
+            throw new Error('Failed to generate PIN');
+          }
+          const status = await response.json();
+          renderStatus(status);
+        } catch (error) {
+          pinStatusEl.textContent = error instanceof Error ? error.message : 'Failed to generate PIN.';
+        } finally {
+          generateBtn.disabled = false;
+          generateBtn.textContent = 'Generate PIN';
+        }
+      }
+
+      generateBtn.addEventListener('click', () => { void generatePin(); });
+      setInterval(updateCountdown, 1000);
+      setInterval(() => { void fetchStatus(); }, 10000);
+      void fetchStatus();
+    </script>
+  </body>
+</html>`;
+}
+
 /**
  * Set up all Express routes for the CompanionServer
  */
@@ -54,6 +362,19 @@ export function setupCompanionRoutes(
       tokenRequired: true,
       companion: true,
     });
+  });
+
+  app.get('/api/backend-admin/status', (_req: Request, res: Response) => {
+    res.json(getAdminStatus(config));
+  });
+
+  app.post('/api/backend-admin/generate-pin', (_req: Request, res: Response) => {
+    config.auth.generatePIN();
+    res.json(getAdminStatus(config));
+  });
+
+  app.get('/synology', (_req: Request, res: Response) => {
+    res.type('html').send(renderSynologyAdminPage(config));
   });
 
   // Serve attachment files (images saved by the renderer)
@@ -119,7 +440,7 @@ export function setupCompanionRoutes(
       return;
     }
     try {
-      const token = await (config.auth as any).pair(credential, deviceName);
+      const token = await config.auth.pair(credential, deviceName);
       if (!token) {
         res.status(401).json({ error: 'Invalid or expired credential' });
         return;

@@ -1,0 +1,105 @@
+#!/bin/sh
+set -eu
+
+PACKAGE_ROOT="${SYNOPKG_PKGDEST}/app"
+CONFIG_DIR="${SYNOPKG_PKGVAR}/config"
+RUN_DIR="${SYNOPKG_PKGVAR}/run"
+LOG_DIR="${SYNOPKG_PKGVAR}/log"
+PID_FILE="${RUN_DIR}/code-server.pid"
+LOG_FILE="${LOG_DIR}/code-server.log"
+CODE_SERVER_BIN="${PACKAGE_ROOT}/code-server/bin/code-server"
+CONFIG_FILE="${CONFIG_DIR}/config.yaml"
+PASSWORD_FILE="${CONFIG_DIR}/password.txt"
+USER_DATA_DIR="${CONFIG_DIR}/user-data"
+EXTENSIONS_DIR="${CONFIG_DIR}/extensions"
+WORKSPACE_DIR="${CODE_SERVER_WORKSPACE_DIR:-/volume1}"
+
+is_running() {
+  [ -f "$PID_FILE" ] || return 1
+  PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+  [ -n "$PID" ] || return 1
+  kill -0 "$PID" 2>/dev/null
+}
+
+generate_password() {
+  if [ ! -f "$PASSWORD_FILE" ]; then
+    od -An -N16 -tx1 /dev/urandom | tr -d ' \n' >"$PASSWORD_FILE"
+    chmod 600 "$PASSWORD_FILE"
+  fi
+}
+
+ensure_config() {
+  mkdir -p "$CONFIG_DIR" "$RUN_DIR" "$LOG_DIR" "$USER_DATA_DIR" "$EXTENSIONS_DIR" "${CONFIG_DIR}/home"
+  generate_password
+
+  if [ ! -f "$CONFIG_FILE" ]; then
+    PASSWORD="$(cat "$PASSWORD_FILE")"
+    cat >"$CONFIG_FILE" <<EOF
+bind-addr: 0.0.0.0:13337
+auth: password
+password: ${PASSWORD}
+cert: false
+EOF
+    chmod 600 "$CONFIG_FILE"
+  fi
+}
+
+start_manual() {
+  ensure_config
+  export HOME="${CONFIG_DIR}/home"
+  export XDG_DATA_HOME="${USER_DATA_DIR}"
+  export XDG_CONFIG_HOME="${CONFIG_DIR}/home/.config"
+  nohup "$CODE_SERVER_BIN" --config "$CONFIG_FILE" --user-data-dir "$USER_DATA_DIR" --extensions-dir "$EXTENSIONS_DIR" "$WORKSPACE_DIR" >>"$LOG_FILE" 2>&1 &
+  echo "$!" >"$PID_FILE"
+
+  sleep 2
+  if ! is_running; then
+    rm -f "$PID_FILE"
+    exit 1
+  fi
+}
+
+stop_manual() {
+  if ! is_running; then
+    rm -f "$PID_FILE"
+    exit 0
+  fi
+
+  kill "$(cat "$PID_FILE")"
+  rm -f "$PID_FILE"
+}
+
+status_manual() {
+  if is_running; then
+    return 0
+  fi
+
+  rm -f "$PID_FILE"
+  return 1
+}
+
+case "${1:-}" in
+  start)
+    if status_manual; then
+      exit 0
+    fi
+    start_manual
+    ;;
+  stop)
+    stop_manual
+    ;;
+  status)
+    if status_manual; then
+      exit 0
+    fi
+    exit 1
+    ;;
+  restart)
+    "$0" stop || true
+    "$0" start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|status|restart}" >&2
+    exit 1
+    ;;
+esac

@@ -106,6 +106,17 @@ If you have [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/con
 
 **Benefits**: No account needed, works through firewalls. The URL changes each time the tunnel restarts.
 
+### Caddy
+
+If you have Caddy installed:
+
+1. Go to **Settings** → **Companion**
+2. Choose **Caddy**
+3. Pilot starts a managed reverse proxy in front of the companion server
+4. Access Pilot through the LAN URL shown in settings
+
+**Benefits**: Good fit for NAS and homelab setups, works as a local reverse proxy first, and can later be pointed at a real domain.
+
 ---
 
 ## Mobile Layout

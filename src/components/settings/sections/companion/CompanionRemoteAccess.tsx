@@ -3,7 +3,7 @@ import { Globe, Terminal } from 'lucide-react';
 import { IPC } from '../../../../../shared/ipc';
 import { invoke, on } from '../../../../lib/ipc-client';
 import { useOutputWindowStore } from '../../../../stores/output-window-store';
-import { TUNNEL_IDS } from '../../../../stores/tunnel-output-store';
+import { TUNNEL_IDS, useTunnelOutputStore } from '../../../../stores/tunnel-output-store';
 import type { CompanionStatus, RemoteAvailability } from './companion-settings-types';
 
 interface CompanionRemoteAccessProps {
@@ -33,18 +33,21 @@ export function CompanionRemoteAccess({ status, onStatusChanged }: CompanionRemo
     return unsub;
   }, []);
 
-  const handleEnableRemote = async (provider: 'tailscale' | 'cloudflare') => {
+  const handleEnableRemote = async (provider: 'tailscale' | 'cloudflare' | 'caddy') => {
     setLoading(true);
     setRemoteError(null);
     setActivationUrl(null);
-    const tunnelId = provider === 'tailscale' ? TUNNEL_IDS.tailscale : TUNNEL_IDS.cloudflare;
-    const outputStore = useOutputWindowStore.getState();
-    outputStore.clearOutput?.(tunnelId);
+    const tunnelId = provider === 'tailscale'
+      ? TUNNEL_IDS.tailscale
+      : provider === 'cloudflare'
+        ? TUNNEL_IDS.cloudflare
+        : TUNNEL_IDS.caddy;
+    useTunnelOutputStore.getState().clearOutput(provider);
     try {
       if (status.remoteUrl) {
         await invoke(IPC.COMPANION_DISABLE_REMOTE);
       }
-      await invoke(IPC.COMPANION_ENABLE_REMOTE, provider === 'tailscale');
+      await invoke(IPC.COMPANION_ENABLE_REMOTE, provider);
       setActivationUrl(null);
       onStatusChanged();
     } catch (err) {
@@ -74,7 +77,7 @@ export function CompanionRemoteAccess({ status, onStatusChanged }: CompanionRemo
         <div className="mt-0.5"><Globe className="w-4 h-4 text-text-secondary" /></div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-text-primary">Remote Access</p>
-          <p className="text-xs text-text-secondary mt-0.5">Access Pilot from outside your local network.</p>
+          <p className="text-xs text-text-secondary mt-0.5">Access Pilot through Tailscale, Cloudflare Tunnel, or a local-first Caddy reverse proxy.</p>
         </div>
       </div>
 
@@ -98,7 +101,9 @@ export function CompanionRemoteAccess({ status, onStatusChanged }: CompanionRemo
               onClick={() => {
                 const tunnelId = status.remoteType === 'tailscale'
                   ? TUNNEL_IDS.tailscale
-                  : TUNNEL_IDS.cloudflare;
+                  : status.remoteType === 'cloudflare'
+                    ? TUNNEL_IDS.cloudflare
+                    : TUNNEL_IDS.caddy;
                 useOutputWindowStore.getState().openOutput(tunnelId);
               }}
               className="px-3 py-1.5 text-xs bg-bg-elevated hover:bg-bg-surface border border-border rounded-md text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1.5"
@@ -133,6 +138,18 @@ export function CompanionRemoteAccess({ status, onStatusChanged }: CompanionRemo
               {remoteAvail === null ? 'Checking…' :
                !remoteAvail.cloudflared ? 'Not installed' :
                'Ready — no account needed'}
+            </div>
+          </button>
+          <button
+            onClick={() => handleEnableRemote('caddy')}
+            disabled={loading || (remoteAvail !== null && !remoteAvail.caddy)}
+            className="flex-1 px-3 py-2 text-xs bg-bg-elevated hover:bg-bg-surface border border-border rounded-md text-text-primary transition-colors disabled:opacity-50 space-y-0.5 text-left"
+          >
+            <div className="font-medium">Caddy</div>
+            <div className={remoteAvail?.caddy === false ? 'text-warning' : 'text-text-secondary'}>
+              {remoteAvail === null ? 'Checking…' :
+               !remoteAvail.caddy ? 'Not installed' :
+               'Ready — local reverse proxy'}
             </div>
           </button>
         </div>

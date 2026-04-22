@@ -5,9 +5,10 @@ PACKAGE_ROOT="${SYNOPKG_PKGDEST}/app"
 CONFIG_DIR="${SYNOPKG_PKGVAR}/config"
 RUN_DIR="${SYNOPKG_PKGVAR}/run"
 LOG_DIR="${SYNOPKG_PKGVAR}/log"
-PID_FILE="${RUN_DIR}/pilot-backend.pid"
-LOG_FILE="${LOG_DIR}/pilot-backend.log"
-ENV_FILE="${CONFIG_DIR}/pilot.env"
+PID_FILE="${RUN_DIR}/wetty.pid"
+LOG_FILE="${LOG_DIR}/wetty.log"
+ENV_FILE="${CONFIG_DIR}/wetty.env"
+WETTY_MAIN="${PACKAGE_ROOT}/wetty/build/main.js"
 
 find_node_bin() {
   for candidate in \
@@ -31,10 +32,33 @@ is_running() {
   kill -0 "$PID" 2>/dev/null
 }
 
+ensure_config() {
+  mkdir -p "$CONFIG_DIR" "$RUN_DIR" "$LOG_DIR"
+
+  if [ ! -f "$ENV_FILE" ]; then
+    cat >"$ENV_FILE" <<EOF
+WETTY_HOST=0.0.0.0
+WETTY_PORT=3000
+WETTY_BASE=/
+WETTY_TITLE=Synology Terminal
+WETTY_COMMAND=/bin/sh
+EOF
+  fi
+}
+
 start_manual() {
+  ensure_config
   NODE_BIN="$(find_node_bin)"
-  cd "$PACKAGE_ROOT"
-  nohup "$NODE_BIN" "${PACKAGE_ROOT}/backend/index.cjs" >>"$LOG_FILE" 2>&1 &
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  export HOME="${CONFIG_DIR}"
+  nohup "$NODE_BIN" "$WETTY_MAIN" \
+    --host "${WETTY_HOST:-0.0.0.0}" \
+    --port "${WETTY_PORT:-3000}" \
+    --base "${WETTY_BASE:-/}" \
+    --title "${WETTY_TITLE:-Synology Terminal}" \
+    --command "${WETTY_COMMAND:-/bin/sh}" \
+    >>"$LOG_FILE" 2>&1 &
   echo "$!" >"$PID_FILE"
 
   sleep 2
@@ -62,27 +86,6 @@ status_manual() {
   rm -f "$PID_FILE"
   return 1
 }
-
-mkdir -p "$CONFIG_DIR" "$RUN_DIR" "$LOG_DIR"
-
-if [ -f "$ENV_FILE" ]; then
-  # shellcheck disable=SC1090
-  . "$ENV_FILE"
-fi
-
-[ "${PILOT_COMPANION_PORT+x}" = x ] && export PILOT_COMPANION_PORT
-[ "${PILOT_COMPANION_PROTOCOL+x}" = x ] && export PILOT_COMPANION_PROTOCOL
-[ "${PILOT_COMPANION_AUTO_START+x}" = x ] && export PILOT_COMPANION_AUTO_START
-
-export HOME="${SYNOPKG_PKGVAR}"
-export PILOT_APP_ROOT="${PACKAGE_ROOT}"
-export PILOT_APP_DIR="${CONFIG_DIR}"
-export PILOT_DOCS_DIR="${PACKAGE_ROOT}/docs/user"
-export PILOT_COMPANION_AUTO_START="${PILOT_COMPANION_AUTO_START:-true}"
-# Synology package installs can surface incompatible optional ws native addons.
-# Force the portable JS implementation so companion WebSocket traffic cannot crash the backend.
-export WS_NO_BUFFER_UTIL=1
-export WS_NO_UTF_8_VALIDATE=1
 
 case "${1:-}" in
   start)

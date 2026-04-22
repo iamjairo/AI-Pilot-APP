@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { app, ipcMain } from 'electron';
 import { IPC } from '../../shared/ipc';
 import { loadProjectSettings } from '../services/project-settings';
 import { loadAppSettings, saveAppSettings, getPiAgentDir } from '../services/app-settings';
@@ -32,6 +32,14 @@ export function registerSettingsIpc(sessionManager?: PilotSessionManager) {
     }
 
     return result;
+  });
+
+  ipcMain.handle(IPC.APP_RELAUNCH, async () => {
+    setTimeout(() => {
+      app.relaunch();
+      app.exit(0);
+    }, 100);
+    return { ok: true };
   });
 
   // ── Pi Agent Settings (piAgentDir/settings.json — default model, provider, etc.) ──
