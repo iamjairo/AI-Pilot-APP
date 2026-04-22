@@ -6,28 +6,43 @@ const MAX_OUTPUT_LINES = 2000;
 const DEFAULT_TIMEOUT = 30_000;
 
 /**
+ * Repeatedly apply a replacement until the text no longer changes.
+ * Prevents incomplete multi-character sanitization where dangerous
+ * patterns can reappear after a single replacement pass.
+ */
+function replaceUntilStable(input: string, pattern: RegExp, replacement: string): string {
+  let previous: string;
+  let current = input;
+  do {
+    previous = current;
+    current = current.replace(pattern, replacement);
+  } while (current !== previous);
+  return current;
+}
+
+/**
  * Strip HTML tags and decode common entities to produce readable text.
  * Removes script/style blocks entirely.
  */
 function htmlToText(html: string): string {
   let text = html;
-  // Remove script and style blocks
-  text = text.replace(/<script[\s\S]*?<\/script>/gi, '');
-  text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
+  // Remove script and style blocks (allow forgiving end-tag syntax like </script > or </script foo="bar">)
+  text = replaceUntilStable(text, /<script[\s\S]*?<\/script(?:\s[^>]*)?>/gi, '');
+  text = replaceUntilStable(text, /<style[\s\S]*?<\/style(?:\s[^>]*)?>/gi, '');
   // Convert block elements to newlines
   text = text.replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, '\n');
   text = text.replace(/<br\s*\/?>/gi, '\n');
   // Strip remaining tags
-  text = text.replace(/<[^>]+>/g, '');
-  // Decode common HTML entities
+  text = replaceUntilStable(text, /<[^>]+>/g, '');
+  // Decode common HTML entities (`&amp;` must be decoded last to avoid double-unescaping)
   text = text
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&amp;/g, '&');
   // Collapse whitespace
   text = text.replace(/[ \t]+/g, ' ');
   text = text.replace(/\n{3,}/g, '\n\n');

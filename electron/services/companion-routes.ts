@@ -1,5 +1,6 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
-import { join, extname, resolve, normalize } from 'path';
+import rateLimit from 'express-rate-limit';
+import { join, extname, resolve, normalize, relative } from 'path';
 import { existsSync } from 'fs';
 import { CompanionAuth } from './companion-server-types';
 import packageJson from '../../package.json';
@@ -324,6 +325,14 @@ export function setupCompanionRoutes(
     auth: CompanionAuth;
   }
 ): void {
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 300, // max requests per client per window
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use(limiter);
+
   // CORS headers - restrict to same-origin; companion clients connect via WebSocket, not CORS
   app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Access-Control-Allow-Origin', 'null');
@@ -335,6 +344,14 @@ export function setupCompanionRoutes(
 
   // JSON middleware for API routes
   app.use(express.json());
+
+  const attachmentsRateLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 60, // limit each IP to 60 attachment requests per minute
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests' },
+  });
 
   // Companion mode detection endpoint
   // The renderer checks this to know it's running in companion mode
@@ -379,41 +396,34 @@ export function setupCompanionRoutes(
 
   // Serve attachment files (images saved by the renderer)
   // Validates the path is inside a .pilot/attachments directory.
-  app.get('/api/attachments', (req: Request, res: Response) => {
+  app.get('/api/attachments', attachmentsRateLimiter, (req: Request, res: Response) => {
     const filePath = req.query.path as string | undefined;
     if (!filePath) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+    res.status(403).json({ error: 'Forbidden' });
+    return;
     }
 
-    // Canonicalize and normalize the path
-    const normalizedPath = normalize(resolve(filePath));
-
-    // Reject paths containing .. segments after normalization
-    if (normalizedPath.includes('..')) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
-    }
-
-    // Verify path contains /.pilot/attachments/ as a real directory component
-    const attachmentsPattern = /[\/\\]\.pilot[\/\\]attachments[\/\\]/;
-    if (!attachmentsPattern.test(normalizedPath)) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+    // Resolve against a trusted attachments root and enforce containment.
+    const attachmentsRoot = resolve(process.env.HOME || '', '.pilot', 'attachments');
+    const normalizedPath = normalize(resolve(attachmentsRoot, filePath));
+    const rel = relative(attachmentsRoot, normalizedPath);
+    if (rel.startsWith('..') || rel.startsWith('/') || rel.startsWith('\\')) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
     }
 
     // Only allow image extensions
-    const ext = extname(normalizedPath).toLowerCase();
+    const ext = extname(canonicalPath).toLowerCase();
     const allowedExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
     if (!allowedExtensions.includes(ext)) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
+    res.status(403).json({ error: 'Forbidden' });
+    return;
     }
 
     // Verify file exists
     if (!existsSync(normalizedPath)) {
-      res.status(404).json({ error: 'Not found' });
-      return;
+    res.status(404).json({ error: 'Not found' });
+    return;
     }
 
     // Serve the file with proper content type
@@ -425,7 +435,7 @@ export function setupCompanionRoutes(
       '.webp': 'image/webp',
     };
     res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
-    res.sendFile(normalizedPath);
+    res.sendFile(canonicalPath);
   });
 
   // Serve static files from the React bundle directory
